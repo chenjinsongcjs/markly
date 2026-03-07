@@ -10,8 +10,8 @@ import SwiftUI
 @main
 struct MarklyApp: App {
     var body: some Scene {
-        WindowGroup {
-            ContentView()
+        DocumentGroup(newDocument: MarkdownDocument()) { file in
+            EditorRootView(document: file.$document)
         }
     }
 }
