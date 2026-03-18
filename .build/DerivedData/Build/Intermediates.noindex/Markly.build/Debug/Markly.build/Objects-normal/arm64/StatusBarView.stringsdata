@@ -1,0 +1,80 @@
+{
+  "source": "/Users/chenjinsong/xcode/Markly/Markly/StatusBarView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "未保存",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "已保存",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ln %lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 22
+        }
+      },
+      {
+        "comment": "",
+        "key": "Col %lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 23
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 已选中",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 24
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 字",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 32
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 字符",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 行",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 段",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 35
+        }
+      }
+    ]
+  },
+  "version": 1
+}

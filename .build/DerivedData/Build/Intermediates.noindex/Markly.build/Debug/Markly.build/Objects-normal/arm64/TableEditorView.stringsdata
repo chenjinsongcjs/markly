@@ -1,0 +1,136 @@
+{
+  "source": "/Users/chenjinsong/xcode/Markly/Markly/TableEditorView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "表格编辑器",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 49
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 列 × %lld 行",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 54
+        }
+      },
+      {
+        "comment": "",
+        "key": "取消",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 58
+        }
+      },
+      {
+        "comment": "",
+        "key": "保存",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 62
+        }
+      },
+      {
+        "comment": "",
+        "key": "左对齐",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "居中",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "右对齐",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除列",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 128
+        }
+      },
+      {
+        "comment": "",
+        "key": "...",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 170
+        }
+      },
+      {
+        "comment": "",
+        "key": "在上方插入行",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 192
+        }
+      },
+      {
+        "comment": "",
+        "key": "在下方插入行",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除行",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "添加行",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "插入表格",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 240
+        }
+      },
+      {
+        "comment": "",
+        "key": "清空表格",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 245
+        }
+      },
+      {
+        "comment": "",
+        "key": "添加列",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 235
+        }
+      }
+    ]
+  },
+  "version": 1
+}

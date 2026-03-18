@@ -1,0 +1,968 @@
+{
+  "source": "/Users/chenjinsong/xcode/Markly/Markly/EditorRootView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "导出成功",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 326
+        }
+      },
+      {
+        "comment": "",
+        "key": "Markly",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 447
+        }
+      },
+      {
+        "comment": "",
+        "key": "标题折叠",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 1218
+        }
+      },
+      {
+        "comment": "",
+        "key": "查找与替换",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 1195
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑器偏好设置",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 1204
+        }
+      },
+      {
+        "comment": "",
+        "key": "视图模式",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 2303
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑模式",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 2334
+        }
+      },
+      {
+        "comment": "",
+        "key": "导出文档",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 2343
+        }
+      },
+      {
+        "comment": "",
+        "key": "确定",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 327
+        }
+      },
+      {
+        "comment": "",
+        "key": "文档已成功导出",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 331
+        }
+      },
+      {
+        "comment": "",
+        "key": "文档",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 375
+        }
+      },
+      {
+        "comment": "",
+        "key": "Typora 方向",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 382
+        }
+      },
+      {
+        "comment": "",
+        "key": "大纲",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 388
+        }
+      },
+      {
+        "comment": "",
+        "key": "结构",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 435
+        }
+      },
+      {
+        "comment": "",
+        "key": "文档模式",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "源码模式",
+        "location": {
+          "startingColumn": 64,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 字",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 377
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 行",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 378
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 块",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 379
+        }
+      },
+      {
+        "comment": "",
+        "key": "单文档编辑为主",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 383
+        }
+      },
+      {
+        "comment": "",
+        "key": "源码模式为辅助",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 384
+        }
+      },
+      {
+        "comment": "",
+        "key": "双击内容块进入编辑",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 385
+        }
+      },
+      {
+        "comment": "",
+        "key": "还没有标题",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 390
+        }
+      },
+      {
+        "comment": "",
+        "key": "H%lld · 第 %lld 行",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 418
+        }
+      },
+      {
+        "comment": "",
+        "key": "已折叠 · %lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 443
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ · %lld",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 1303
+        }
+      },
+      {
+        "comment": "",
+        "key": "Typora 风格主路径",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 565
+        }
+      },
+      {
+        "comment": "",
+        "key": "双击任意块进入编辑，任务项可直接勾选，表格和图片支持专用编辑入口。",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 575
+        }
+      },
+      {
+        "comment": "",
+        "key": "当前文档以%@为主。",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 580
+        }
+      },
+      {
+        "comment": "",
+        "key": "取消",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 607
+        }
+      },
+      {
+        "comment": "",
+        "key": "应用",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 610
+        }
+      },
+      {
+        "comment": "",
+        "key": "直接编辑该块对应的 Markdown。",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 629
+        }
+      },
+      {
+        "comment": "",
+        "key": "下方插入段落",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 633
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除块",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 636
+        }
+      },
+      {
+        "comment": "",
+        "key": "打开链接",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 696
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑链接",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 699
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除链接",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 702
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制链接",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 705
+        }
+      },
+      {
+        "comment": "",
+        "key": "定位到内容块",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2138
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制块",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 2144
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制块到下方",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 2148
+        }
+      },
+      {
+        "comment": "",
+        "key": "转换为",
+        "location": {
+          "startingColumn": 14,
+          "startingLine": 2154
+        }
+      },
+      {
+        "comment": "",
+        "key": "上移块",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 2189
+        }
+      },
+      {
+        "comment": "",
+        "key": "下移块",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 2194
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除块",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 2201
+        }
+      },
+      {
+        "comment": "",
+        "key": "H",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 733
+        }
+      },
+      {
+        "comment": "",
+        "key": "H%lld",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 733
+        }
+      },
+      {
+        "comment": "",
+        "key": "H",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 733
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 行内容",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 759
+        }
+      },
+      {
+        "comment": "",
+        "key": "第 %lld 行",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 754
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 821
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制代码块",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 839
+        }
+      },
+      {
+        "comment": "",
+        "key": "表格内容无法解析，仍可切换到源码模式修复。",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 880
+        }
+      },
+      {
+        "comment": "",
+        "key": "打开",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 903
+        }
+      },
+      {
+        "comment": "",
+        "key": "复制路径",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 908
+        }
+      },
+      {
+        "comment": "",
+        "key": "打开图片",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 927
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑图片",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 932
+        }
+      },
+      {
+        "comment": "",
+        "key": "删除图片",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 936
+        }
+      },
+      {
+        "comment": "",
+        "key": "匹配搜索",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1013
+        }
+      },
+      {
+        "comment": "",
+        "key": "第 %lld 行",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1024
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1029
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑表格",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1034
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑图片",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1039
+        }
+      },
+      {
+        "comment": "",
+        "key": "搜索结果 %lld/%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1055
+        }
+      },
+      {
+        "comment": "",
+        "key": "插入链接",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1093
+        }
+      },
+      {
+        "comment": "",
+        "key": "显示文本",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1096
+        }
+      },
+      {
+        "comment": "",
+        "key": "URL",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1097
+        }
+      },
+      {
+        "comment": "",
+        "key": "取消",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1101
+        }
+      },
+      {
+        "comment": "",
+        "key": "插入",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1104
+        }
+      },
+      {
+        "comment": "",
+        "key": "插入图片",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1116
+        }
+      },
+      {
+        "comment": "",
+        "key": "图片描述",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1119
+        }
+      },
+      {
+        "comment": "",
+        "key": "图片地址或本地路径",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1120
+        }
+      },
+      {
+        "comment": "",
+        "key": "取消",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1124
+        }
+      },
+      {
+        "comment": "",
+        "key": "插入",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1127
+        }
+      },
+      {
+        "comment": "",
+        "key": "查找替换",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 1193
+        }
+      },
+      {
+        "comment": "",
+        "key": "偏好设置",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 1202
+        }
+      },
+      {
+        "comment": "",
+        "key": "折叠当前标题",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1209
+        }
+      },
+      {
+        "comment": "",
+        "key": "全部折叠",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1211
+        }
+      },
+      {
+        "comment": "",
+        "key": "全部展开",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1213
+        }
+      },
+      {
+        "comment": "",
+        "key": "折叠",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 1216
+        }
+      },
+      {
+        "comment": "",
+        "key": "第 %lld 行",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1233
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld 行内容",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1238
+        }
+      },
+      {
+        "comment": "",
+        "key": "H%lld",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 1223
+        }
+      },
+      {
+        "comment": "",
+        "key": "展开",
+        "location": {
+          "startingColumn": 82,
+          "startingLine": 1242
+        }
+      },
+      {
+        "comment": "",
+        "key": "折叠",
+        "location": {
+          "startingColumn": 93,
+          "startingLine": 1242
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1277
+        }
+      },
+      {
+        "comment": "",
+        "key": "发现未命名文档草稿",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 1274
+        }
+      },
+      {
+        "comment": "",
+        "key": "恢复草稿",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1284
+        }
+      },
+      {
+        "comment": "",
+        "key": "丢弃",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1289
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1311
+        }
+      },
+      {
+        "comment": "",
+        "key": "标题 H1",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2155
+        }
+      },
+      {
+        "comment": "",
+        "key": "标题 H2",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2158
+        }
+      },
+      {
+        "comment": "",
+        "key": "标题 H3",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2161
+        }
+      },
+      {
+        "comment": "",
+        "key": "引用",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2167
+        }
+      },
+      {
+        "comment": "",
+        "key": "无序列表",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2170
+        }
+      },
+      {
+        "comment": "",
+        "key": "有序列表",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2173
+        }
+      },
+      {
+        "comment": "",
+        "key": "任务列表",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2176
+        }
+      },
+      {
+        "comment": "",
+        "key": "代码块",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2179
+        }
+      },
+      {
+        "comment": "",
+        "key": "普通段落",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2182
+        }
+      },
+      {
+        "comment": "",
+        "key": "导出",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 2341
+        }
+      },
+      {
+        "comment": "",
+        "key": "查找与替换",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 2521
+        }
+      },
+      {
+        "comment": "",
+        "key": "查找内容",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 2524
+        }
+      },
+      {
+        "comment": "",
+        "key": "替换为",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 2525
+        }
+      },
+      {
+        "comment": "",
+        "key": "无匹配项",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 2528
+        }
+      },
+      {
+        "comment": "",
+        "key": "第 %lld / %lld 项",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 2528
+        }
+      },
+      {
+        "comment": "",
+        "key": "上一个",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2532
+        }
+      },
+      {
+        "comment": "",
+        "key": "下一个",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2534
+        }
+      },
+      {
+        "comment": "",
+        "key": "替换当前",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2539
+        }
+      },
+      {
+        "comment": "",
+        "key": "全部替换",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2541
+        }
+      },
+      {
+        "comment": "",
+        "key": "关闭",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2544
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑器偏好设置",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 2583
+        }
+      },
+      {
+        "comment": "",
+        "key": "默认视图",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2586
+        }
+      },
+      {
+        "comment": "",
+        "key": "编辑模式",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2592
+        }
+      },
+      {
+        "comment": "",
+        "key": "图片显示",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2615
+        }
+      },
+      {
+        "comment": "",
+        "key": "跟随系统外观",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 2626
+        }
+      },
+      {
+        "comment": "",
+        "key": "字体大小 %lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 2599
+        }
+      },
+      {
+        "comment": "",
+        "key": "文档宽度 %lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 2611
+        }
+      },
+      {
+        "comment": "",
+        "key": "自动保存 %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 2622
+        }
+      },
+      {
+        "comment": "",
+        "key": "取消",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2630
+        }
+      },
+      {
+        "comment": "",
+        "key": "保存",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 2633
+        }
+      }
+    ]
+  },
+  "version": 1
+}

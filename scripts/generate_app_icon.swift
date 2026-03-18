@@ -148,24 +148,42 @@ func drawDocumentCard() {
     NSGraphicsContext.current?.restoreGraphicsState()
 }
 
-func renderIcon(size: CGFloat) -> NSImage {
-    let image = NSImage(size: NSSize(width: size, height: size))
-    image.lockFocus()
+func renderBitmap(size: Int) throws -> NSBitmapImageRep {
+    guard let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: size,
+        pixelsHigh: size,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    ) else {
+        throw NSError(domain: "IconGeneration", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to create bitmap context"])
+    }
 
+    bitmap.size = NSSize(width: size, height: size)
+
+    NSGraphicsContext.saveGraphicsState()
+    guard let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+        throw NSError(domain: "IconGeneration", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to create graphics context"])
+    }
+
+    NSGraphicsContext.current = context
     NSColor.clear.setFill()
-    NSRect(origin: .zero, size: image.size).fill()
-
+    NSRect(x: 0, y: 0, width: size, height: size).fill()
     fillBackground(in: NSRect(x: 0, y: 0, width: size, height: size))
     drawDocumentCard()
+    context.flushGraphics()
+    NSGraphicsContext.restoreGraphicsState()
 
-    image.unlockFocus()
-    return image
+    return bitmap
 }
 
-func writePNG(_ image: NSImage, to url: URL) throws {
-    guard let tiffData = image.tiffRepresentation,
-          let bitmap = NSBitmapImageRep(data: tiffData),
-          let pngData = bitmap.representation(using: .png, properties: [:]) else {
+func writePNG(_ bitmap: NSBitmapImageRep, to url: URL) throws {
+    guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
         throw NSError(domain: "IconGeneration", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode PNG"])
     }
 
@@ -177,7 +195,7 @@ let outputDirectory = args.count > 1 ? URL(fileURLWithPath: args[1], isDirectory
 
 try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
 
-let image = renderIcon(size: 1024)
+let image = try renderBitmap(size: 1024)
 let outputURL = outputDirectory.appendingPathComponent("icon_1024.png")
 try writePNG(image, to: outputURL)
 print(outputURL.path)
