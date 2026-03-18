@@ -82,7 +82,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
-        context.coordinator.applyHighlighting()
+        context.coordinator.scheduleHighlighting(.immediate)
         context.coordinator.applyStructureAnnotations(
             highlightedLineRange: highlightedLineRange,
             softFoldedLineRanges: softFoldedLineRanges
@@ -98,7 +98,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             let selectedRange = textView.selectedRange()
             textView.string = text
             textView.setSelectedRange(selectedRange.clamped(to: text.utf16.count))
-            context.coordinator.applyHighlighting()
+            context.coordinator.scheduleHighlighting(.immediate)
         }
 
         if textView.delegate == nil {
@@ -117,13 +117,20 @@ struct NativeMarkdownEditor: NSViewRepresentable {
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
+        fileprivate enum HighlightMode {
+            case immediate
+            case deferred
+        }
+
         @Binding private var text: String
         @Binding private var selectionState: EditorSelectionState
         @Binding private var requestedLine: Int?
         @Binding private var revealedLine: Int?
         @Binding var editMode: EditorEditMode
         private let highlighter = MarkdownSyntaxHighlighter()
+        private let highlightDebounceInterval: TimeInterval = 0.06
         private var lastHandledRequestedLine: Int?
+        private var pendingHighlightWorkItem: DispatchWorkItem?
         private var observers: [NSObjectProtocol] = []
         weak var textView: NSTextView?
 
@@ -144,13 +151,14 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         }
 
         deinit {
+            pendingHighlightWorkItem?.cancel()
             observers.forEach(NotificationCenter.default.removeObserver)
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView else { return }
             text = textView.string
-            applyHighlighting()
+            scheduleHighlighting(.deferred)
             updateSelectionState(for: textView)
         }
 
@@ -196,6 +204,23 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         func applyHighlighting() {
             guard let textStorage = textView?.textStorage else { return }
             highlighter.highlight(textStorage: textStorage)
+        }
+
+        fileprivate func scheduleHighlighting(_ mode: HighlightMode) {
+            pendingHighlightWorkItem?.cancel()
+            pendingHighlightWorkItem = nil
+
+            switch mode {
+            case .immediate:
+                applyHighlighting()
+            case .deferred:
+                let workItem = DispatchWorkItem { [weak self] in
+                    self?.pendingHighlightWorkItem = nil
+                    self?.applyHighlighting()
+                }
+                pendingHighlightWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + highlightDebounceInterval, execute: workItem)
+            }
         }
 
         func applyStructureAnnotations(
@@ -353,7 +378,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
 
         private func syncState(from textView: NSTextView) {
             text = textView.string
-            applyHighlighting()
+            scheduleHighlighting(.immediate)
             updateSelectionState(for: textView)
         }
 

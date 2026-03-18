@@ -65,6 +65,87 @@ private struct SearchMatch: Identifiable {
     var id: Int { index }
 }
 
+private struct EditorDocumentAnalysisSnapshot {
+    let text: String
+    let blocks: [MarkdownBlock]
+    let headings: [MarkdownHeading]
+    let headingSections: [MarkdownHeadingSection]
+    let headingSectionsByLine: [Int: MarkdownHeadingSection]
+    let blockCounts: [MarkdownBlockKind: Int]
+    let lineCount: Int
+    let wordCount: Int
+
+    static func analyze(_ text: String) -> EditorDocumentAnalysisSnapshot {
+        let blocks = MarkdownAnalysis.blocks(in: text)
+        let headings = blocks.compactMap { block -> MarkdownHeading? in
+            guard block.kind == .heading else { return nil }
+            let trimmed = block.text.trimmingCharacters(in: .whitespaces)
+            let level = trimmed.prefix { $0 == "#" }.count
+            let title = trimmed.dropFirst(level).trimmingCharacters(in: .whitespaces)
+            return MarkdownHeading(level: level, title: title, lineNumber: block.lineStart)
+        }
+        let totalLineCount = max(1, MarkdownAnalysis.lines(in: text).count)
+        let headingSections = headings.enumerated().map { index, heading in
+            let nextSiblingOrParent = headings.dropFirst(index + 1).first(where: { $0.level <= heading.level })
+            let sectionEnd = (nextSiblingOrParent?.lineNumber ?? (totalLineCount + 1)) - 1
+
+            return MarkdownHeadingSection(
+                heading: heading,
+                contentLineStart: heading.lineNumber + 1,
+                contentLineEnd: max(heading.lineNumber, sectionEnd)
+            )
+        }
+        let headingSectionsByLine = Dictionary(uniqueKeysWithValues: headingSections.map { ($0.heading.lineNumber, $0) })
+        let blockCounts = blocks.reduce(into: [MarkdownBlockKind: Int]()) { partialResult, block in
+            partialResult[block.kind, default: 0] += 1
+        }
+
+        return EditorDocumentAnalysisSnapshot(
+            text: text,
+            blocks: blocks,
+            headings: headings,
+            headingSections: headingSections,
+            headingSectionsByLine: headingSectionsByLine,
+            blockCounts: blockCounts,
+            lineCount: totalLineCount,
+            wordCount: text.split { $0.isWhitespace || $0.isNewline }.count
+        )
+    }
+}
+
+private enum AnalysisRefreshMode {
+    case immediate
+    case deferred
+}
+
+private struct EditorSearchSnapshot {
+    let text: String
+    let query: String
+    let matches: [SearchMatch]
+
+    static func analyze(text: String, query: String) -> EditorSearchSnapshot {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedQuery.isEmpty else {
+            return EditorSearchSnapshot(text: text, query: query, matches: [])
+        }
+
+        var matches: [SearchMatch] = []
+        var searchStart = text.startIndex
+        var index = 0
+        let loweredContent = text.lowercased()
+        let loweredQuery = normalizedQuery.lowercased()
+
+        while searchStart < text.endIndex,
+              let range = loweredContent.range(of: loweredQuery, range: searchStart..<loweredContent.endIndex) {
+            matches.append(SearchMatch(range: range, index: index))
+            searchStart = range.upperBound
+            index += 1
+        }
+
+        return EditorSearchSnapshot(text: text, query: query, matches: matches)
+    }
+}
+
 private enum BlockEditorAction {
     case commit
     case continueFromCurrentLine(text: String, range: NSRange)
@@ -104,6 +185,9 @@ struct EditorRootView: View {
     @State private var activeEditingBlockID: String?
     @State private var editingBlockText = ""
     @State private var blockEditorSelection = NSRange(location: 0, length: 0)
+    @State private var analysisSnapshot = EditorDocumentAnalysisSnapshot.analyze(MarkdownDocument().text)
+    @State private var pendingAnalysisRefreshTask: Task<Void, Never>?
+    @State private var searchSnapshot = EditorSearchSnapshot.analyze(text: MarkdownDocument().text, query: "")
     @State private var tableEditingContext: TableEditingContext?
     @StateObject private var autoSaveManager = AutoSaveManager.shared
     @State private var lastSavedText = ""
@@ -115,6 +199,7 @@ struct EditorRootView: View {
     @FocusState private var blockEditorFocused: Bool
 
     private let preferences = EditorPreferences.shared
+    private let analysisRefreshDelayNanoseconds: UInt64 = 80_000_000
 
     private var untitledDraftStorageValue: String? {
         UserDefaults.standard.string(forKey: Self.untitledDraftKey)
@@ -143,19 +228,23 @@ struct EditorRootView: View {
     }
 
     private var blocks: [MarkdownBlock] {
-        MarkdownAnalysis.blocks(in: document.text)
+        analysisSnapshot.blocks
     }
 
     private var headings: [MarkdownHeading] {
-        MarkdownAnalysis.headings(in: document.text)
+        analysisSnapshot.headings
     }
 
     private var headingSections: [MarkdownHeadingSection] {
-        MarkdownAnalysis.headingSections(in: document.text)
+        analysisSnapshot.headingSections
+    }
+
+    private var headingSectionsByLine: [Int: MarkdownHeadingSection] {
+        analysisSnapshot.headingSectionsByLine
     }
 
     private var blockCounts: [MarkdownBlockKind: Int] {
-        MarkdownAnalysis.blockCounts(in: document.text)
+        analysisSnapshot.blockCounts
     }
 
     private var visiblePreviewBlocks: [MarkdownBlock] {
@@ -174,7 +263,7 @@ struct EditorRootView: View {
             return blocks.first(where: { $0.id == activeEditingBlockID })
         }
 
-        return MarkdownAnalysis.block(containingLine: selectionState.line, in: document.text)
+        return blocks.first { ($0.lineStart...$0.lineEnd).contains(selectionState.line) }
     }
 
     private var currentHeadingLine: Int? {
@@ -188,7 +277,7 @@ struct EditorRootView: View {
 
     private var currentHeadingSection: MarkdownHeadingSection? {
         guard let currentHeadingLine else { return nil }
-        return headingSections.first(where: { $0.heading.lineNumber == currentHeadingLine })
+        return headingSectionsByLine[currentHeadingLine]
     }
 
     private var previousHeading: MarkdownHeading? {
@@ -220,22 +309,7 @@ struct EditorRootView: View {
     }
 
     private var searchMatches: [SearchMatch] {
-        guard let query = searchText.nonEmpty else { return [] }
-
-        var matches: [SearchMatch] = []
-        var searchStart = document.text.startIndex
-        var index = 0
-        let loweredContent = document.text.lowercased()
-        let loweredQuery = query.lowercased()
-
-        while searchStart < document.text.endIndex,
-              let range = loweredContent.range(of: loweredQuery, range: searchStart..<loweredContent.endIndex) {
-            matches.append(SearchMatch(range: range, index: index))
-            searchStart = range.upperBound
-            index += 1
-        }
-
-        return matches
+        searchSnapshot.matches
     }
 
     private var currentSearchMatch: SearchMatch? {
@@ -245,11 +319,11 @@ struct EditorRootView: View {
     }
 
     private var lineCount: Int {
-        max(1, MarkdownAnalysis.lines(in: document.text).count)
+        analysisSnapshot.lineCount
     }
 
     private var wordCount: Int {
-        document.text.split { $0.isWhitespace || $0.isNewline }.count
+        analysisSnapshot.wordCount
     }
 
     private var listBlockCount: Int {
@@ -331,6 +405,8 @@ struct EditorRootView: View {
             Text("文档已成功导出")
         }
         .onAppear {
+            scheduleAnalysisSnapshotRefresh(for: document.text, mode: .immediate)
+            refreshSearchSnapshot(for: document.text, query: searchText)
             viewMode = preferences.viewMode
             editMode = preferences.editMode
             lastSavedText = document.text
@@ -341,18 +417,24 @@ struct EditorRootView: View {
             syncSearchLocation()
         }
         .onDisappear {
+            pendingAnalysisRefreshTask?.cancel()
             saveDocumentIfNeeded(forcePanelForUntitled: false)
             persistUntitledDraftIfNeeded()
             unregisterAutoSave()
         }
         .onChange(of: viewMode) { _, newValue in
             preferences.viewMode = newValue
+            if newValue == .document {
+                scheduleAnalysisSnapshotRefresh(for: document.text, mode: .immediate)
+            }
             syncSearchLocation()
         }
         .onChange(of: editMode) { _, newValue in
             preferences.editMode = newValue
         }
         .onChange(of: document.text) { oldValue, newValue in
+            scheduleAnalysisSnapshotRefresh(for: newValue, mode: analysisRefreshMode(for: oldValue, newValue))
+            refreshSearchSnapshot(for: newValue, query: searchText)
             if currentSearchIndex >= searchMatches.count {
                 currentSearchIndex = max(0, searchMatches.count - 1)
             }
@@ -360,6 +442,7 @@ struct EditorRootView: View {
             syncSearchLocation()
         }
         .onChange(of: searchText) { _, _ in
+            refreshSearchSnapshot(for: document.text, query: searchText)
             currentSearchIndex = 0
             syncSearchLocation()
         }
@@ -391,7 +474,7 @@ struct EditorRootView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(headings) { heading in
-                        let section = headingSections.first(where: { $0.heading.lineNumber == heading.lineNumber })
+                        let section = headingSectionsByLine[heading.lineNumber]
                         HStack(spacing: 8) {
                             if let section, section.hasContent {
                                 Button {
@@ -739,7 +822,7 @@ struct EditorRootView: View {
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if headingSections.contains(where: { $0.heading.lineNumber == block.lineStart && $0.hasContent }) {
+                if headingSectionsByLine[block.lineStart]?.hasContent == true {
                     Button {
                         toggleFold(for: block.lineStart)
                     } label: {
@@ -755,7 +838,7 @@ struct EditorRootView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let section = headingSections.first(where: { $0.heading.lineNumber == block.lineStart }), section.hasContent {
+                if let section = headingSectionsByLine[block.lineStart], section.hasContent {
                     Text("\(max(0, section.contentLineEnd - section.heading.lineNumber)) 行内容")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1761,6 +1844,7 @@ struct EditorRootView: View {
     private func restoreUntitledDraft(_ draft: String) {
         pendingUntitledDraftRecovery = nil
         document.text = draft
+        scheduleAnalysisSnapshotRefresh(for: draft, mode: .immediate)
         lastUntitledDraftSaveTime = untitledDraftTimestamp ?? Date()
     }
 
@@ -2004,6 +2088,49 @@ struct EditorRootView: View {
         document.text = mutation.text
         requestedLine = mutation.focusLine
         revealedLine = mutation.focusLine
+    }
+
+    private func refreshAnalysisSnapshot(for text: String) {
+        guard analysisSnapshot.text != text else { return }
+        analysisSnapshot = EditorDocumentAnalysisSnapshot.analyze(text)
+    }
+
+    private func scheduleAnalysisSnapshotRefresh(for text: String, mode: AnalysisRefreshMode) {
+        pendingAnalysisRefreshTask?.cancel()
+        pendingAnalysisRefreshTask = nil
+
+        switch mode {
+        case .immediate:
+            refreshAnalysisSnapshot(for: text)
+        case .deferred:
+            guard analysisSnapshot.text != text else { return }
+            pendingAnalysisRefreshTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: analysisRefreshDelayNanoseconds)
+                guard !Task.isCancelled else { return }
+                refreshAnalysisSnapshot(for: document.text)
+                pendingAnalysisRefreshTask = nil
+            }
+        }
+    }
+
+    private func analysisRefreshMode(for oldValue: String, _ newValue: String) -> AnalysisRefreshMode {
+        if viewMode == .document || activeEditingBlockID != nil {
+            return .immediate
+        }
+
+        let lineDelta = abs(
+            MarkdownAnalysis.lines(in: newValue).count - MarkdownAnalysis.lines(in: oldValue).count
+        )
+        if lineDelta > 4 {
+            return .immediate
+        }
+
+        return .deferred
+    }
+
+    private func refreshSearchSnapshot(for text: String, query: String) {
+        guard searchSnapshot.text != text || searchSnapshot.query != query else { return }
+        searchSnapshot = EditorSearchSnapshot.analyze(text: text, query: query)
     }
 
     private func taskMatch(in line: String) -> (prefix: String, isCompleted: Bool, suffix: String, text: String)? {
