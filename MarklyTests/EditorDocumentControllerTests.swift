@@ -81,4 +81,52 @@ final class EditorDocumentControllerTests: XCTestCase {
         XCTAssertEqual(mutation?.focusLine, 1)
         XCTAssertEqual(mutation?.text, "First\nSecond")
     }
+
+    func testConvertBlockToHeadingNormalizesMarkdownSyntax() {
+        let markdown = """
+        - [ ] todo item
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.convertBlockToHeading(
+            in: markdown,
+            block: block,
+            level: 2
+        )
+
+        XCTAssertEqual(mutation.text, "## todo item")
+        XCTAssertEqual(mutation.focusLine, 1)
+    }
+
+    func testConvertBlockToCodeFenceWrapsPlainParagraph() {
+        let markdown = """
+        print("hello")
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.convertBlock(
+            in: markdown,
+            block: block,
+            to: .codeFence
+        )
+
+        XCTAssertEqual(mutation.text, "```\nprint(\"hello\")\n```")
+    }
+
+    func testConvertCodeFenceToParagraphUnwrapsFence() {
+        let markdown = """
+        ```swift
+        print("hello")
+        ```
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.convertBlock(
+            in: markdown,
+            block: block,
+            to: .paragraph
+        )
+
+        XCTAssertEqual(mutation.text, "```swift\nprint(\"hello\")\n```")
+    }
 }

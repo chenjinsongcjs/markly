@@ -631,10 +631,10 @@ struct EditorRootView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("下方插入段落") {
-                    insertParagraph(after: block)
+                    executeDocumentCommand(.insertParagraph(after: block))
                 }
                 Button("删除块", role: .destructive) {
-                    deleteBlock(block)
+                    executeDocumentCommand(.deleteBlock(block))
                     cancelBlockEditing()
                 }
             }
@@ -780,7 +780,7 @@ struct EditorRootView: View {
 
             ForEach(taskItems(in: block)) { item in
                 Button {
-                    toggleTaskItem(at: item.lineNumber)
+                    executeDocumentCommand(.toggleTaskItem(lineNumber: item.lineNumber))
                 } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -1068,7 +1068,7 @@ struct EditorRootView: View {
         command: MarkdownEditorCommand
     ) -> some View {
         Button {
-            postEditorCommand(command)
+            performEditorCommand(command)
         } label: {
             Label(title, systemImage: systemImage)
         }
@@ -1823,6 +1823,25 @@ struct EditorRootView: View {
         insertBlockAfter(block, markdown: "\n新段落", focusLineOffset: 2)
     }
 
+    private func executeDocumentCommand(_ command: EditorDocumentCommand) {
+        switch command {
+        case .insertParagraph(let block):
+            insertParagraph(after: block)
+        case .toggleTaskItem(let lineNumber):
+            toggleTaskItem(at: lineNumber)
+        case .convertBlockToHeading(let block, let level):
+            convertBlockToHeading(block, level: level)
+        case .convertBlock(let block, let kind):
+            convertBlock(block, to: kind)
+        case .duplicateBlock(let block):
+            duplicateBlock(block)
+        case .moveBlock(let block, let direction):
+            moveBlock(block, direction: direction)
+        case .deleteBlock(let block):
+            deleteBlock(block)
+        }
+    }
+
     private func insertBlockAfter(_ block: MarkdownBlock, markdown: String, focusLineOffset: Int) {
         let insertionBlock = blocks.first(where: { $0.id == block.id }) ?? block
         let mutation = EditorDocumentController.insertBlock(
@@ -1913,70 +1932,23 @@ struct EditorRootView: View {
     }
 
     private func convertBlockToHeading(_ block: MarkdownBlock, level: Int) {
-        let normalized = normalizedLines(from: block)
-        let title = normalized.first?.nonEmpty ?? "标题"
-        let heading = String(repeating: "#", count: max(1, min(level, 6))) + " " + title
-        replaceBlock(block, with: heading)
+        applyMutation(
+            EditorDocumentController.convertBlockToHeading(
+                in: document.text,
+                block: block,
+                level: level
+            )
+        )
     }
 
     private func convertBlock(_ block: MarkdownBlock, to kind: MarkdownBlockKind) {
-        let normalized = normalizedLines(from: block)
-        let replacement: String
-
-        switch kind {
-        case .paragraph:
-            replacement = normalized.joined(separator: "\n").nonEmpty ?? "段落内容"
-        case .quote:
-            replacement = normalized.map { $0.isEmpty ? "" : "> " + $0 }.joined(separator: "\n")
-        case .unorderedList:
-            replacement = normalized.map { $0.isEmpty ? "" : "- " + $0 }.joined(separator: "\n")
-        case .orderedList:
-            replacement = normalized.enumerated().map { index, line in
-                line.isEmpty ? "" : "\(index + 1). " + line
-            }.joined(separator: "\n")
-        case .taskList:
-            replacement = normalized.map { $0.isEmpty ? "" : "- [ ] " + $0 }.joined(separator: "\n")
-        case .codeFence:
-            let blockText = block.kind == .codeFence ? unwrapCodeFence(from: block.text) : block.text
-            replacement = "```\n" + blockText.trimmingCharacters(in: .newlines) + "\n```"
-        case .heading, .table, .image, .thematicBreak:
-            replacement = block.text
-        }
-
-        replaceBlock(block, with: replacement)
-    }
-
-    private func normalizedLines(from block: MarkdownBlock) -> [String] {
-        block.text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map(String.init)
-            .map(normalizeLineContent)
-    }
-
-    private func normalizeLineContent(_ line: String) -> String {
-        let strippedQuote = replaceRegex(in: line, pattern: #"^\s*(?:>\s*)+"#, with: "")
-        let strippedHeading = replaceRegex(in: strippedQuote, pattern: #"^\s*#{1,6}\s+"#, with: "")
-        let strippedTask = replaceRegex(in: strippedHeading, pattern: #"^\s*[-*+]\s+\[[ xX]\]\s+"#, with: "")
-        let strippedUnordered = replaceRegex(in: strippedTask, pattern: #"^\s*[-*+]\s+"#, with: "")
-        let strippedOrdered = replaceRegex(in: strippedUnordered, pattern: #"^\s*\d+\.\s+"#, with: "")
-        return strippedOrdered.trimmingCharacters(in: .whitespaces)
-    }
-
-    private func replaceRegex(in text: String, pattern: String, with replacement: String) -> String {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let range = NSRange(location: 0, length: (text as NSString).length)
-        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
-    }
-
-    private func unwrapCodeFence(from text: String) -> String {
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        if let first = lines.first, first.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-            lines.removeFirst()
-        }
-        if let last = lines.last, last.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-            lines.removeLast()
-        }
-        return lines.joined(separator: "\n")
+        applyMutation(
+            EditorDocumentController.convertBlock(
+                in: document.text,
+                block: block,
+                to: kind
+            )
+        )
     }
 
     private func deleteBlock(_ block: MarkdownBlock) {
@@ -2146,60 +2118,60 @@ struct EditorRootView: View {
         }
 
         Button("复制块到下方") {
-            duplicateBlock(block)
+            executeDocumentCommand(.duplicateBlock(block))
         }
 
         Divider()
 
         Menu("转换为") {
             Button("标题 H1") {
-                convertBlockToHeading(block, level: 1)
+                executeDocumentCommand(.convertBlockToHeading(block: block, level: 1))
             }
             Button("标题 H2") {
-                convertBlockToHeading(block, level: 2)
+                executeDocumentCommand(.convertBlockToHeading(block: block, level: 2))
             }
             Button("标题 H3") {
-                convertBlockToHeading(block, level: 3)
+                executeDocumentCommand(.convertBlockToHeading(block: block, level: 3))
             }
 
             Divider()
 
             Button("引用") {
-                convertBlock(block, to: .quote)
+                executeDocumentCommand(.convertBlock(block: block, kind: .quote))
             }
             Button("无序列表") {
-                convertBlock(block, to: .unorderedList)
+                executeDocumentCommand(.convertBlock(block: block, kind: .unorderedList))
             }
             Button("有序列表") {
-                convertBlock(block, to: .orderedList)
+                executeDocumentCommand(.convertBlock(block: block, kind: .orderedList))
             }
             Button("任务列表") {
-                convertBlock(block, to: .taskList)
+                executeDocumentCommand(.convertBlock(block: block, kind: .taskList))
             }
             Button("代码块") {
-                convertBlock(block, to: .codeFence)
+                executeDocumentCommand(.convertBlock(block: block, kind: .codeFence))
             }
             Button("普通段落") {
-                convertBlock(block, to: .paragraph)
+                executeDocumentCommand(.convertBlock(block: block, kind: .paragraph))
             }
         }
 
         Divider()
 
         Button("上移块") {
-            moveBlock(block, direction: .up)
+            executeDocumentCommand(.moveBlock(block, direction: .up))
         }
         .disabled(isFirstBlock(block))
 
         Button("下移块") {
-            moveBlock(block, direction: .down)
+            executeDocumentCommand(.moveBlock(block, direction: .down))
         }
         .disabled(isLastBlock(block))
 
         Divider()
 
         Button("删除块", role: .destructive) {
-            deleteBlock(block)
+            executeDocumentCommand(.deleteBlock(block))
         }
     }
 
@@ -2266,6 +2238,136 @@ struct EditorRootView: View {
         guard let heading else { return }
         requestedLine = heading.lineNumber
         revealedLine = heading.lineNumber
+    }
+
+    private func performEditorCommand(_ command: MarkdownEditorCommand, payload: [String: String] = [:]) {
+        if viewMode == .document, payload.isEmpty, handleDocumentModeCommand(command) {
+            return
+        }
+
+        postEditorCommand(command, payload: payload)
+    }
+
+    private func handleDocumentModeCommand(_ command: MarkdownEditorCommand) -> Bool {
+        switch command {
+        case .heading:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlockToHeading(block: block, level: 1))
+            }
+        case .quote:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlock(block: block, kind: .quote))
+            }
+        case .bulletList:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlock(block: block, kind: .unorderedList))
+            }
+        case .orderedList:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlock(block: block, kind: .orderedList))
+            }
+        case .taskList:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlock(block: block, kind: .taskList))
+            }
+        case .codeFence:
+            return performDocumentBlockCommand { block in
+                executeDocumentCommand(.convertBlock(block: block, kind: .codeFence))
+            }
+        case .toggleTaskCompletion:
+            guard let lineNumber = currentTaskLineNumber() else { return false }
+            executeDocumentCommand(.toggleTaskItem(lineNumber: lineNumber))
+            return true
+        case .bold:
+            return wrapCurrentBlockEditorSelection(prefix: "**", suffix: "**")
+        case .italic:
+            return wrapCurrentBlockEditorSelection(prefix: "*", suffix: "*")
+        case .inlineCode:
+            return wrapCurrentBlockEditorSelection(prefix: "`", suffix: "`")
+        case .insertLink, .insertImage,
+             .toggleViewMode, .toggleEditMode,
+             .switchToNormalMode, .switchToFocusMode, .switchToTypewriterMode,
+             .switchToSourceMode, .switchToWysiwygMode, .switchToSplitMode:
+            return false
+        }
+    }
+
+    private func performDocumentBlockCommand(_ action: (MarkdownBlock) -> Void) -> Bool {
+        guard let block = activeDocumentCommandBlock else { return false }
+        let wasEditing = activeEditingBlockID == block.id
+        action(block)
+
+        if wasEditing {
+            refreshActiveEditingBlock(at: block.lineStart)
+        }
+
+        return true
+    }
+
+    private var activeDocumentCommandBlock: MarkdownBlock? {
+        if let activeEditingBlockID, let block = blocks.first(where: { $0.id == activeEditingBlockID }) {
+            return block
+        }
+
+        return currentBlock
+    }
+
+    private func refreshActiveEditingBlock(at lineNumber: Int) {
+        guard let updatedBlock = MarkdownAnalysis.block(containingLine: lineNumber, in: document.text), isInlineEditable(updatedBlock) else {
+            cancelBlockEditing()
+            return
+        }
+
+        activeEditingBlockID = updatedBlock.id
+        editingBlockText = updatedBlock.text
+        requestedLine = updatedBlock.lineStart
+        revealedLine = updatedBlock.lineStart
+    }
+
+    private func currentTaskLineNumber() -> Int? {
+        guard let block = activeDocumentCommandBlock, block.kind == .taskList else { return nil }
+
+        if let activeEditingBlockID, activeEditingBlockID == block.id {
+            let nsText = editingBlockText as NSString
+            let safeLocation = min(blockEditorSelection.location, nsText.length)
+            let prefix = nsText.substring(to: safeLocation)
+            let relativeLine = max(1, prefix.split(separator: "\n", omittingEmptySubsequences: false).count)
+            return block.lineStart + relativeLine - 1
+        }
+
+        return block.lineStart
+    }
+
+    private func wrapCurrentBlockEditorSelection(prefix: String, suffix: String) -> Bool {
+        guard activeEditingBlockID != nil else { return false }
+
+        let nsText = editingBlockText as NSString
+        let safeLocation = min(max(0, blockEditorSelection.location), nsText.length)
+        let safeLength = min(max(0, blockEditorSelection.length), nsText.length - safeLocation)
+        let safeRange = NSRange(location: safeLocation, length: safeLength)
+        let selectedText = nsText.substring(with: safeRange)
+
+        let replacement: String
+        let newSelection: NSRange
+
+        if selectedText.hasPrefix(prefix),
+           selectedText.hasSuffix(suffix),
+           selectedText.count >= prefix.count + suffix.count {
+            let start = selectedText.index(selectedText.startIndex, offsetBy: prefix.count)
+            let end = selectedText.index(selectedText.endIndex, offsetBy: -suffix.count)
+            replacement = String(selectedText[start..<end])
+            newSelection = NSRange(location: safeRange.location, length: replacement.utf16.count)
+        } else {
+            replacement = prefix + selectedText + suffix
+            newSelection = NSRange(
+                location: safeRange.location + prefix.utf16.count,
+                length: safeRange.length
+            )
+        }
+
+        editingBlockText = nsText.replacingCharacters(in: safeRange, with: replacement)
+        blockEditorSelection = newSelection
+        return true
     }
 
     private func postEditorCommand(_ command: MarkdownEditorCommand, payload: [String: String] = [:]) {

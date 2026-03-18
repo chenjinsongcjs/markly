@@ -12,7 +12,50 @@ struct EditorDocumentMutation {
     let focusLine: Int
 }
 
+@MainActor
 enum EditorDocumentController {
+    static func convertBlockToHeading(
+        in text: String,
+        block: MarkdownBlock,
+        level: Int
+    ) -> EditorDocumentMutation {
+        let normalized = normalizedLines(from: block)
+        let title = firstNonEmptyValue(in: normalized) ?? "标题"
+        let heading = String(repeating: "#", count: max(1, min(level, 6))) + " " + title
+        return replaceBlock(in: text, block: block, replacement: heading)
+    }
+
+    static func convertBlock(
+        in text: String,
+        block: MarkdownBlock,
+        to kind: MarkdownBlockKind
+    ) -> EditorDocumentMutation {
+        let normalized = normalizedLines(from: block)
+        let replacement: String
+
+        switch kind {
+        case .paragraph:
+            replacement = nonEmpty(normalized.joined(separator: "\n")) ?? "段落内容"
+        case .quote:
+            replacement = normalized.map { $0.isEmpty ? "" : "> " + $0 }.joined(separator: "\n")
+        case .unorderedList:
+            replacement = normalized.map { $0.isEmpty ? "" : "- " + $0 }.joined(separator: "\n")
+        case .orderedList:
+            replacement = normalized.enumerated().map { index, line in
+                line.isEmpty ? "" : "\(index + 1). " + line
+            }.joined(separator: "\n")
+        case .taskList:
+            replacement = normalized.map { $0.isEmpty ? "" : "- [ ] " + $0 }.joined(separator: "\n")
+        case .codeFence:
+            let blockText = block.kind == .codeFence ? unwrapCodeFence(from: block.text) : block.text
+            replacement = "```\n" + blockText.trimmingCharacters(in: .newlines) + "\n```"
+        case .heading, .table, .image, .thematicBreak:
+            replacement = block.text
+        }
+
+        return replaceBlock(in: text, block: block, replacement: replacement)
+    }
+
     static func mergeBlocks(
         in text: String,
         previous: MarkdownBlock,
@@ -284,5 +327,47 @@ enum EditorDocumentController {
     private static func lineNumberForFirstCaseInsensitiveMatch(of query: String, in text: String) -> Int? {
         guard let range = text.range(of: query, options: .caseInsensitive) else { return nil }
         return lineNumber(for: range.lowerBound, in: text)
+    }
+
+    private static func normalizedLines(from block: MarkdownBlock) -> [String] {
+        block.text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map(String.init)
+            .map(normalizeLineContent)
+    }
+
+    private static func normalizeLineContent(_ line: String) -> String {
+        let strippedQuote = replaceRegex(in: line, pattern: #"^\s*(?:>\s*)+"#, with: "")
+        let strippedHeading = replaceRegex(in: strippedQuote, pattern: #"^\s*#{1,6}\s+"#, with: "")
+        let strippedTask = replaceRegex(in: strippedHeading, pattern: #"^\s*[-*+]\s+\[[ xX]\]\s+"#, with: "")
+        let strippedUnordered = replaceRegex(in: strippedTask, pattern: #"^\s*[-*+]\s+"#, with: "")
+        let strippedOrdered = replaceRegex(in: strippedUnordered, pattern: #"^\s*\d+\.\s+"#, with: "")
+        return strippedOrdered.trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func replaceRegex(in text: String, pattern: String, with replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: replacement)
+    }
+
+    private static func unwrapCodeFence(from text: String) -> String {
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        if let first = lines.first, first.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+            lines.removeFirst()
+        }
+        if let last = lines.last, last.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+            lines.removeLast()
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func firstNonEmptyValue(in values: [String]) -> String? {
+        values.first { nonEmpty($0) != nil }.flatMap(nonEmpty)
+    }
+
+    private static func nonEmpty(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
