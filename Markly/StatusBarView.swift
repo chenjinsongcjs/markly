@@ -12,6 +12,8 @@ struct StatusBarView: View {
     let text: String
     let selectionState: EditorSelectionState
     let currentBlock: MarkdownBlock?
+    let isDirty: Bool
+    let autoSaveStatus: String?
 
     var body: some View {
         HStack(spacing: 16) {
@@ -43,8 +45,13 @@ struct StatusBarView: View {
 
             Spacer()
 
-            // 模式指示器（如果需要显示）
-            // TODO: 添加当前视图/编辑模式指示器
+            if let autoSaveStatus {
+                Label(autoSaveStatus, systemImage: "clock.arrow.circlepath")
+            }
+
+            Label(isDirty ? "未保存" : "已保存", systemImage: isDirty ? "circle.fill" : "checkmark.circle")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(isDirty ? .orange : .secondary)
         }
         .font(.caption)
         .foregroundStyle(.secondary)

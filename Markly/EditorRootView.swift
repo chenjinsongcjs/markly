@@ -65,9 +65,22 @@ private struct SearchMatch: Identifiable {
     var id: Int { index }
 }
 
+private enum BlockEditorAction {
+    case commit
+    case continueFromCurrentLine(text: String, range: NSRange)
+    case deleteIfEmpty
+    case mergeWithPrevious
+    case indentSelection(range: NSRange)
+    case outdentSelection(range: NSRange)
+}
+
 struct EditorRootView: View {
+    private static let untitledDraftKey = "editor.untitledDraft"
+    private static let untitledDraftTimestampKey = "editor.untitledDraft.timestamp"
+
     @Binding var document: MarkdownDocument
     let fileURL: URL?
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewMode: EditorViewMode = EditorPreferences.shared.viewMode
     @State private var editMode: EditorEditMode = EditorPreferences.shared.editMode
     @State private var selectionState = EditorSelectionState()
@@ -90,10 +103,44 @@ struct EditorRootView: View {
     @State private var currentSearchIndex = 0
     @State private var activeEditingBlockID: String?
     @State private var editingBlockText = ""
+    @State private var blockEditorSelection = NSRange(location: 0, length: 0)
     @State private var tableEditingContext: TableEditingContext?
+    @StateObject private var autoSaveManager = AutoSaveManager.shared
+    @State private var lastSavedText = ""
+    @State private var initialDocumentText = ""
+    @State private var didRegisterAutoSave = false
+    @State private var isSavingDocument = false
+    @State private var pendingUntitledDraftRecovery: String?
+    @State private var lastUntitledDraftSaveTime: Date?
     @FocusState private var blockEditorFocused: Bool
 
     private let preferences = EditorPreferences.shared
+
+    private var untitledDraftStorageValue: String? {
+        UserDefaults.standard.string(forKey: Self.untitledDraftKey)
+    }
+
+    private var untitledDraftTimestamp: Date? {
+        let timestamp = UserDefaults.standard.double(forKey: Self.untitledDraftTimestampKey)
+        guard timestamp > 0 else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+    }
+
+    private var isDirty: Bool {
+        document.text != lastSavedText
+    }
+
+    private var autoSaveStatusText: String? {
+        if fileURL == nil {
+            if let lastUntitledDraftSaveTime {
+                let secondsAgo = Int(Date().timeIntervalSince(lastUntitledDraftSaveTime))
+                return secondsAgo < 60 ? "草稿已暂存" : "\(max(1, secondsAgo / 60)) 分钟前暂存"
+            }
+            return nil
+        }
+
+        return autoSaveManager.autoSaveStatus
+    }
 
     private var blocks: [MarkdownBlock] {
         MarkdownAnalysis.blocks(in: document.text)
@@ -286,17 +333,40 @@ struct EditorRootView: View {
         .onAppear {
             viewMode = preferences.viewMode
             editMode = preferences.editMode
+            lastSavedText = document.text
+            initialDocumentText = document.text
+            configureAutoSaveIfNeeded()
+            restoreUntitledDraftIfNeeded()
+            refreshDocumentEditedState()
+            syncSearchLocation()
+        }
+        .onDisappear {
+            saveDocumentIfNeeded(forcePanelForUntitled: false)
+            persistUntitledDraftIfNeeded()
+            unregisterAutoSave()
         }
         .onChange(of: viewMode) { _, newValue in
             preferences.viewMode = newValue
+            syncSearchLocation()
         }
         .onChange(of: editMode) { _, newValue in
             preferences.editMode = newValue
         }
-        .onChange(of: document.text) { _, _ in
+        .onChange(of: document.text) { oldValue, newValue in
             if currentSearchIndex >= searchMatches.count {
                 currentSearchIndex = max(0, searchMatches.count - 1)
             }
+            handleDocumentTextChange(from: oldValue, to: newValue)
+            syncSearchLocation()
+        }
+        .onChange(of: searchText) { _, _ in
+            currentSearchIndex = 0
+            syncSearchLocation()
+        }
+        .onChange(of: scenePhase) { _, newValue in
+            guard newValue == .inactive || newValue == .background else { return }
+            persistUntitledDraftIfNeeded()
+            saveDocumentIfNeeded(forcePanelForUntitled: false)
         }
     }
 
@@ -392,6 +462,11 @@ struct EditorRootView: View {
         VStack(alignment: .leading, spacing: 0) {
             paneTitle("源码")
 
+            if let pendingUntitledDraftRecovery, fileURL == nil {
+                untitledDraftRecoveryBanner(draft: pendingUntitledDraftRecovery)
+                Divider()
+            }
+
             if let currentHeadingSection {
                 headingContextBar(currentHeadingSection)
                 Divider()
@@ -414,7 +489,9 @@ struct EditorRootView: View {
             StatusBarView(
                 text: document.text,
                 selectionState: selectionState,
-                currentBlock: currentBlock
+                currentBlock: currentBlock,
+                isDirty: isDirty,
+                autoSaveStatus: autoSaveStatusText
             )
         }
     }
@@ -422,6 +499,11 @@ struct EditorRootView: View {
     private var documentEditor: some View {
         VStack(alignment: .leading, spacing: 0) {
             paneTitle("文档")
+
+            if let pendingUntitledDraftRecovery, fileURL == nil {
+                untitledDraftRecoveryBanner(draft: pendingUntitledDraftRecovery)
+                Divider()
+            }
 
             if let currentHeadingSection {
                 headingContextBar(currentHeadingSection)
@@ -471,7 +553,9 @@ struct EditorRootView: View {
             StatusBarView(
                 text: document.text,
                 selectionState: documentSelectionState,
-                currentBlock: currentBlock
+                currentBlock: currentBlock,
+                isDirty: isDirty,
+                autoSaveStatus: autoSaveStatusText
             )
         }
     }
@@ -529,10 +613,14 @@ struct EditorRootView: View {
                 .buttonStyle(.borderedProminent)
             }
 
-            TextEditor(text: $editingBlockText)
-                .font(.system(size: CGFloat(preferences.fontSize), design: .monospaced))
+            BlockTextEditor(
+                text: $editingBlockText,
+                selectedRange: $blockEditorSelection,
+                fontSize: CGFloat(preferences.fontSize)
+            ) { action in
+                handleBlockEditorAction(action, for: block)
+            }
                 .frame(minHeight: block.kind == .codeFence ? 220 : 120)
-                .padding(8)
                 .background(Color(nsColor: .textBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .focused($blockEditorFocused)
@@ -1081,6 +1169,7 @@ struct EditorRootView: View {
             initialUseSystemAppearance: preferences.useSystemAppearance,
             initialImageDisplayMode: preferences.imageDisplayMode
         ) { newPreferences in
+            let previousAutoSaveInterval = preferences.autoSaveInterval
             preferences.viewMode = newPreferences.viewMode
             preferences.editMode = newPreferences.editMode
             preferences.fontSize = newPreferences.fontSize
@@ -1090,6 +1179,10 @@ struct EditorRootView: View {
             preferences.imageDisplayMode = newPreferences.imageDisplayMode
             viewMode = newPreferences.viewMode
             editMode = newPreferences.editMode
+
+            if previousAutoSaveInterval != newPreferences.autoSaveInterval {
+                autoSaveManager.restartAutoSaveTimer()
+            }
         }
     }
 
@@ -1176,6 +1269,32 @@ struct EditorRootView: View {
         .background(Color.accentColor.opacity(0.05))
     }
 
+    private func untitledDraftRecoveryBanner(draft: String) -> some View {
+        HStack(spacing: 12) {
+            Label("发现未命名文档草稿", systemImage: "clock.badge.exclamationmark")
+                .font(.subheadline.weight(.semibold))
+
+            Text("\(draftPreviewText(for: draft))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            Button("恢复草稿") {
+                restoreUntitledDraft(draft)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button("丢弃") {
+                discardUntitledDraftRecovery()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.1))
+    }
+
     private func blockCountRow(_ title: String, kind: MarkdownBlockKind, systemImage: String) -> some View {
         blockCountRow(title, count: blockCounts[kind, default: 0], systemImage: systemImage)
     }
@@ -1253,6 +1372,7 @@ struct EditorRootView: View {
 
         activeEditingBlockID = block.id
         editingBlockText = block.text
+        blockEditorSelection = NSRange(location: (block.text as NSString).length, length: 0)
         requestedLine = block.lineStart
         revealedLine = block.lineStart
     }
@@ -1267,9 +1387,79 @@ struct EditorRootView: View {
         cancelBlockEditing()
     }
 
+    private func handleBlockEditorAction(_ action: BlockEditorAction, for block: MarkdownBlock) {
+        switch action {
+        case .commit:
+            commitBlockEditing(block)
+        case .continueFromCurrentLine(let text, let range):
+            continueFromBlockEditing(block, currentLineText: text, currentLineRange: range)
+        case .deleteIfEmpty:
+            let trimmed = editingBlockText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                deleteBlock(block)
+                cancelBlockEditing()
+            }
+        case .mergeWithPrevious:
+            mergeBlockWithPrevious(block)
+        case .indentSelection(let range):
+            indentBlockEditing(for: block, range: range, direction: .right)
+        case .outdentSelection(let range):
+            indentBlockEditing(for: block, range: range, direction: .left)
+        }
+    }
+
+    private func continueFromBlockEditing(_ block: MarkdownBlock, currentLineText: String, currentLineRange: NSRange) {
+        let trimmed = editingBlockText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let editedText = editingBlockText
+
+        if trimmed.isEmpty {
+            deleteBlock(block)
+            cancelBlockEditing()
+            return
+        }
+
+        if BlockEditingBehavior.shouldExitStructure(for: block.kind, currentLineText: currentLineText) {
+            let cleaned = removingCurrentLine(in: editedText, range: currentLineRange)
+            editingBlockText = cleaned
+            let cleanedTrimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if cleanedTrimmed.isEmpty {
+                deleteBlock(block)
+                cancelBlockEditing()
+            } else {
+                replaceBlock(block, with: cleaned)
+                let updatedBlock = blocks.first(where: { $0.lineStart == block.lineStart }) ??
+                    MarkdownAnalysis.block(containingLine: block.lineStart, in: document.text) ??
+                    block
+                insertBlockAfter(updatedBlock, markdown: "\n新段落", focusLineOffset: 2)
+            }
+            return
+        }
+
+        replaceBlock(block, with: editedText)
+
+        let updatedBlock = blocks.first(where: { $0.lineStart == block.lineStart }) ?? MarkdownAnalysis.block(containingLine: block.lineStart, in: document.text) ?? block
+        let continuation = BlockEditingBehavior.continuationMarkdown(after: updatedBlock, editedText: editedText)
+        insertBlockAfter(updatedBlock, markdown: continuation, focusLineOffset: continuationFocusLineOffset(for: updatedBlock))
+    }
+
+    private func removingCurrentLine(in text: String, range: NSRange) -> String {
+        let nsText = text as NSString
+        let paragraphRange = nsText.paragraphRange(for: range)
+        let mutable = NSMutableString(string: text)
+        mutable.replaceCharacters(in: paragraphRange, with: "")
+
+        var result = String(mutable)
+        while result.contains("\n\n\n") {
+            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+        return result.trimmingCharacters(in: .newlines)
+    }
+
     private func cancelBlockEditing() {
         activeEditingBlockID = nil
         editingBlockText = ""
+        blockEditorSelection = NSRange(location: 0, length: 0)
         blockEditorFocused = false
     }
 
@@ -1459,6 +1649,155 @@ struct EditorRootView: View {
         revealedLine = lineNumber
     }
 
+    private func configureAutoSaveIfNeeded() {
+        guard !didRegisterAutoSave else { return }
+        didRegisterAutoSave = true
+
+        if let fileURL {
+            autoSaveManager.registerFile(url: fileURL) { _ in
+                saveDocumentIfNeeded(forcePanelForUntitled: false)
+            }
+        }
+    }
+
+    private func unregisterAutoSave() {
+        guard didRegisterAutoSave else { return }
+        didRegisterAutoSave = false
+
+        if let fileURL {
+            autoSaveManager.unregisterFile(url: fileURL)
+        }
+    }
+
+    private func handleDocumentTextChange(from oldValue: String, to newValue: String) {
+        guard oldValue != newValue else { return }
+
+        markDocumentAsChanged()
+        refreshDocumentEditedState()
+
+        if let fileURL {
+            autoSaveManager.notifyPendingChange(for: fileURL, content: newValue)
+        } else {
+            persistUntitledDraftIfNeeded()
+        }
+    }
+
+    private func markDocumentAsChanged() {
+        resolvedNSDocument()?.updateChangeCount(.changeDone)
+    }
+
+    private func refreshDocumentEditedState() {
+        NSApp.mainWindow?.isDocumentEdited = isDirty
+        NSApp.keyWindow?.isDocumentEdited = isDirty
+    }
+
+    private func resolvedNSDocument() -> NSDocument? {
+        if let fileURL {
+            return NSDocumentController.shared.documents.first(where: { $0.fileURL == fileURL }) ?? NSDocumentController.shared.currentDocument
+        }
+
+        return NSDocumentController.shared.currentDocument
+    }
+
+    private func saveDocumentIfNeeded(forcePanelForUntitled: Bool) {
+        guard !isSavingDocument else { return }
+        guard isDirty || forcePanelForUntitled else { return }
+        guard let appDocument = resolvedNSDocument() else { return }
+
+        let snapshot = document.text
+        isSavingDocument = true
+
+        let completion: (Error?) -> Void = { error in
+            Task { @MainActor in
+                isSavingDocument = false
+                guard error == nil else { return }
+
+                lastSavedText = snapshot
+                refreshDocumentEditedState()
+
+                if let fileURL {
+                    if document.text == snapshot {
+                        autoSaveManager.clearPendingChange(for: fileURL)
+                    } else {
+                        autoSaveManager.notifyPendingChange(for: fileURL, content: document.text)
+                    }
+                }
+            }
+        }
+
+        if fileURL == nil, forcePanelForUntitled {
+            appDocument.save(nil)
+            completion(nil)
+            return
+        }
+
+        appDocument.autosave(withImplicitCancellability: true) { error in
+            completion(error)
+        }
+    }
+
+    private func restoreUntitledDraftIfNeeded() {
+        guard fileURL == nil else {
+            clearUntitledDraftStorage()
+            return
+        }
+
+        lastUntitledDraftSaveTime = untitledDraftTimestamp
+
+        guard let draft = untitledDraftStorageValue?.nonEmpty else { return }
+        guard draft != document.text else {
+            pendingUntitledDraftRecovery = nil
+            return
+        }
+        guard document.text == initialDocumentText else { return }
+
+        pendingUntitledDraftRecovery = draft
+    }
+
+    private func restoreUntitledDraft(_ draft: String) {
+        pendingUntitledDraftRecovery = nil
+        document.text = draft
+        lastUntitledDraftSaveTime = untitledDraftTimestamp ?? Date()
+    }
+
+    private func discardUntitledDraftRecovery() {
+        pendingUntitledDraftRecovery = nil
+        clearUntitledDraftStorage()
+    }
+
+    private func persistUntitledDraftIfNeeded() {
+        guard fileURL == nil else { return }
+
+        if shouldPersistUntitledDraft(document.text) {
+            UserDefaults.standard.set(document.text, forKey: Self.untitledDraftKey)
+            let now = Date()
+            UserDefaults.standard.set(now.timeIntervalSince1970, forKey: Self.untitledDraftTimestampKey)
+            lastUntitledDraftSaveTime = now
+        } else {
+            clearUntitledDraftStorage()
+        }
+    }
+
+    private func shouldPersistUntitledDraft(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return text != initialDocumentText
+    }
+
+    private func clearUntitledDraftStorage() {
+        UserDefaults.standard.removeObject(forKey: Self.untitledDraftKey)
+        UserDefaults.standard.removeObject(forKey: Self.untitledDraftTimestampKey)
+        lastUntitledDraftSaveTime = nil
+    }
+
+    private func draftPreviewText(for text: String) -> String {
+        text
+            .split(whereSeparator: \.isNewline)
+            .map(String.init)
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "继续上次未保存的内容"
+    }
+
     private func replaceFirstOccurrenceInBlock(startingAt lineNumber: Int, target: String, replacement: String) {
         guard let block = blocks.first(where: { $0.lineStart == lineNumber }) else { return }
         guard let range = block.text.range(of: target) else { return }
@@ -1473,11 +1812,98 @@ struct EditorRootView: View {
     }
 
     private func insertParagraph(after block: MarkdownBlock) {
-        document.text = MarkdownAnalysis.insertBlock("\n新段落", afterLine: block.lineEnd, in: document.text)
-        let line = block.lineEnd + 2
+        insertBlockAfter(block, markdown: "\n新段落", focusLineOffset: 2)
+    }
+
+    private func insertBlockAfter(_ block: MarkdownBlock, markdown: String, focusLineOffset: Int) {
+        let insertionBlock = blocks.first(where: { $0.id == block.id }) ?? block
+        document.text = MarkdownAnalysis.insertBlock(markdown, afterLine: insertionBlock.lineEnd, in: document.text)
+        let line = insertionBlock.lineEnd + focusLineOffset
         requestedLine = line
         revealedLine = line
-        activeEditingBlockID = nil
+        if let newBlock = MarkdownAnalysis.block(containingLine: line, in: document.text), isInlineEditable(newBlock) {
+            activeEditingBlockID = newBlock.id
+            editingBlockText = newBlock.text
+        } else {
+            activeEditingBlockID = nil
+            editingBlockText = ""
+        }
+    }
+
+    private func continuationFocusLineOffset(for block: MarkdownBlock) -> Int {
+        switch block.kind {
+        case .heading, .paragraph, .image, .table, .thematicBreak, .codeFence:
+            return 2
+        case .quote, .unorderedList, .orderedList, .taskList:
+            return 2
+        }
+    }
+
+    private func mergeBlockWithPrevious(_ block: MarkdownBlock) {
+        let allBlocks = blocks
+        guard let currentIndex = allBlocks.firstIndex(of: block), currentIndex > 0 else { return }
+
+        let previousBlock = allBlocks[currentIndex - 1]
+        guard isInlineEditable(previousBlock) else { return }
+
+        let mergedText = mergedBlockText(previous: previousBlock, current: block)
+        var lines = MarkdownAnalysis.lines(in: document.text)
+        let previousStart = max(0, previousBlock.lineStart - 1)
+        let currentEnd = min(lines.count - 1, block.lineEnd - 1)
+        let mergedLines = mergedText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        lines.replaceSubrange(previousStart...currentEnd, with: mergedLines)
+        document.text = lines.joined(separator: "\n")
+
+        let focusLine = previousBlock.lineStart
+        requestedLine = focusLine
+        revealedLine = focusLine
+
+        if let updatedBlock = MarkdownAnalysis.block(containingLine: focusLine, in: document.text), isInlineEditable(updatedBlock) {
+            activeEditingBlockID = updatedBlock.id
+            editingBlockText = updatedBlock.text
+            blockEditorSelection = NSRange(location: mergeSelectionOffset(in: mergedText, previousText: previousBlock.text), length: 0)
+        } else {
+            cancelBlockEditing()
+        }
+    }
+
+    private func mergedBlockText(previous: MarkdownBlock, current: MarkdownBlock) -> String {
+        let previousTrimmed = previous.text.trimmingCharacters(in: .newlines)
+        let currentTrimmed = current.text.trimmingCharacters(in: .newlines)
+
+        guard !previousTrimmed.isEmpty else { return currentTrimmed }
+        guard !currentTrimmed.isEmpty else { return previousTrimmed }
+
+        let separator = mergeSeparator(previous: previous.kind, current: current.kind)
+        return previousTrimmed + separator + currentTrimmed
+    }
+
+    private func mergeSeparator(previous: MarkdownBlockKind, current: MarkdownBlockKind) -> String {
+        switch (previous, current) {
+        case (.paragraph, .paragraph), (.heading, .paragraph), (.paragraph, .heading):
+            return "\n"
+        case (.quote, .quote),
+             (.unorderedList, .unorderedList),
+             (.orderedList, .orderedList),
+             (.taskList, .taskList),
+             (.codeFence, .codeFence):
+            return "\n"
+        default:
+            return "\n\n"
+        }
+    }
+
+    private func mergeSelectionOffset(in mergedText: String, previousText: String) -> Int {
+        let offset = previousText.trimmingCharacters(in: .newlines).count
+        return min(offset, (mergedText as NSString).length)
+    }
+
+    private func indentBlockEditing(for block: MarkdownBlock, range: NSRange, direction: BlockIndentDirection) {
+        guard BlockEditingBehavior.supportsIndentation(for: block.kind) else { return }
+        let updated = BlockEditingBehavior.adjustingIndentation(in: editingBlockText, selectedRange: range, direction: direction)
+        guard updated.text != editingBlockText || updated.selection != blockEditorSelection else { return }
+        editingBlockText = updated.text
+        blockEditorSelection = updated.selection
     }
 
     private func convertBlockToHeading(_ block: MarkdownBlock, level: Int) {
@@ -1736,20 +2162,25 @@ struct EditorRootView: View {
     private func moveToSearchMatch(step: Int) {
         guard !searchMatches.isEmpty else { return }
         currentSearchIndex = (currentSearchIndex + step + searchMatches.count) % searchMatches.count
-        if let line = currentSearchLine {
-            requestedLine = line
-            revealedLine = line
-        }
+        syncSearchLocation()
     }
 
     private func replaceCurrentSearchMatch() {
         guard let match = currentSearchMatch else { return }
         document.text.replaceSubrange(match.range, with: replaceText)
+        syncSearchLocation()
     }
 
     private func replaceAllSearchMatches() {
         guard let query = searchText.nonEmpty else { return }
         document.text = document.text.replacingOccurrences(of: query, with: replaceText, options: .caseInsensitive)
+        syncSearchLocation()
+    }
+
+    private func syncSearchLocation() {
+        guard let line = currentSearchLine else { return }
+        requestedLine = line
+        revealedLine = line
     }
 
     @ViewBuilder
@@ -1990,6 +2421,139 @@ private struct PreferencesDraft {
     var autoSaveInterval: TimeInterval
     var useSystemAppearance: Bool
     var imageDisplayMode: EditorImageDisplayMode
+}
+
+private struct BlockTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var selectedRange: NSRange
+    let fontSize: CGFloat
+    let onAction: (BlockEditorAction) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, selectedRange: $selectedRange, onAction: onAction)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.autohidesScrollers = true
+
+        let textView = BlockEditingTextView()
+        textView.delegate = context.coordinator
+        textView.onAction = context.coordinator.handleAction
+        textView.isRichText = false
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.allowsUndo = true
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.string = text
+        textView.backgroundColor = .textBackgroundColor
+
+        scrollView.documentView = textView
+        context.coordinator.textView = textView
+        return scrollView
+    }
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        guard let textView = context.coordinator.textView else { return }
+
+        if textView.string != text {
+            textView.string = text
+        }
+
+        if textView.font?.pointSize != fontSize {
+            textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
+
+        if !NSEqualRanges(textView.selectedRange(), selectedRange) {
+            textView.setSelectedRange(selectedRange)
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        @Binding private var text: String
+        @Binding private var selectedRange: NSRange
+        let onAction: (BlockEditorAction) -> Void
+        weak var textView: BlockEditingTextView?
+
+        init(text: Binding<String>, selectedRange: Binding<NSRange>, onAction: @escaping (BlockEditorAction) -> Void) {
+            _text = text
+            _selectedRange = selectedRange
+            self.onAction = onAction
+        }
+
+        func textDidChange(_ notification: Notification) {
+            text = textView?.string ?? text
+            if let textView {
+                selectedRange = textView.selectedRange()
+            }
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            if let textView {
+                selectedRange = textView.selectedRange()
+            }
+        }
+
+        func handleAction(_ action: BlockEditorAction) {
+            onAction(action)
+        }
+    }
+}
+
+private final class BlockEditingTextView: NSTextView {
+    var onAction: ((BlockEditorAction) -> Void)?
+
+    override func doCommand(by selector: Selector) {
+        if selector == #selector(insertNewline(_:)) {
+            let flags = NSApp.currentEvent?.modifierFlags.intersection(.deviceIndependentFlagsMask) ?? []
+            if flags.contains(.shift) {
+                super.doCommand(by: selector)
+                return
+            }
+
+            if flags.contains(.command) {
+                onAction?(.commit)
+                return
+            }
+
+            let nsText = string as NSString
+            let selectedRange = selectedRange()
+            let lineRange = nsText.paragraphRange(for: selectedRange)
+            let lineText = nsText.substring(with: lineRange)
+            onAction?(.continueFromCurrentLine(text: lineText, range: lineRange))
+            return
+        }
+
+        if selector == #selector(insertTab(_:)) {
+            onAction?(.indentSelection(range: selectedRange()))
+            return
+        }
+
+        if selector == #selector(insertBacktab(_:)) {
+            onAction?(.outdentSelection(range: selectedRange()))
+            return
+        }
+
+        if selector == #selector(deleteBackward(_:)) || selector == #selector(deleteForward(_:)) {
+            let currentSelection = selectedRange()
+            if selector == #selector(deleteBackward(_:)), currentSelection.length == 0, currentSelection.location == 0 {
+                onAction?(.mergeWithPrevious)
+                return
+            }
+
+            if string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                onAction?(.deleteIfEmpty)
+                return
+            }
+        }
+
+        super.doCommand(by: selector)
+    }
 }
 
 private struct FindReplaceSheet: View {
