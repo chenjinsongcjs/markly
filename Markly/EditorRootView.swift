@@ -65,6 +65,172 @@ private struct SearchMatch: Identifiable {
     var id: Int { index }
 }
 
+private struct PreviewBlockSnapshot {
+    let attributedText: AttributedString
+    let links: [PreviewLinkItem]
+    let image: PreviewImageItem?
+    let taskItems: [PreviewTaskItem]
+    let table: MarkdownTable?
+    let codeFenceLanguage: String
+}
+
+private struct EditorDocumentPreviewSnapshot {
+    let text: String
+    let query: String
+    let currentSearchLine: Int?
+    let blocksByID: [String: PreviewBlockSnapshot]
+
+    static func analyze(
+        blocks: [MarkdownBlock],
+        query: String,
+        currentSearchLine: Int?,
+        imageURLResolver: (String) -> URL?
+    ) -> EditorDocumentPreviewSnapshot {
+        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let blocksByID = Dictionary(uniqueKeysWithValues: blocks.map { block in
+            (
+                block.id,
+                PreviewBlockSnapshot(
+                    attributedText: PreviewParsing.highlightedMarkdownAttributedString(
+                        for: block,
+                        query: normalizedQuery,
+                        currentSearchLine: currentSearchLine
+                    ),
+                    links: PreviewParsing.links(in: block.text),
+                    image: PreviewParsing.imageItem(in: block, imageURLResolver: imageURLResolver),
+                    taskItems: PreviewParsing.taskItems(in: block),
+                    table: block.kind == .table ? MarkdownTable.parse(from: block.text) : nil,
+                    codeFenceLanguage: PreviewParsing.codeFenceLanguage(in: block.text)
+                )
+            )
+        })
+
+        return EditorDocumentPreviewSnapshot(
+            text: blocks.map(\.text).joined(separator: "\u{1F}"),
+            query: normalizedQuery,
+            currentSearchLine: currentSearchLine,
+            blocksByID: blocksByID
+        )
+    }
+}
+
+private enum PreviewParsing {
+    static let linkRegex = try! NSRegularExpression(pattern: #"\[([^\]]+)\]\(([^)]+)\)"#)
+    static let imageRegex = try! NSRegularExpression(pattern: #"^!\[([^\]]*)\]\(([^)]+)\)$"#)
+
+    static func markdownAttributedString(for markdown: String) -> AttributedString {
+        do {
+            return try AttributedString(
+                markdown: markdown.isEmpty ? " " : markdown,
+                options: AttributedString.MarkdownParsingOptions(
+                    interpretedSyntax: .full,
+                    failurePolicy: .returnPartiallyParsedIfPossible
+                )
+            )
+        } catch {
+            return AttributedString(markdown)
+        }
+    }
+
+    static func highlightedMarkdownAttributedString(
+        for block: MarkdownBlock,
+        query: String,
+        currentSearchLine: Int?
+    ) -> AttributedString {
+        let base = markdownAttributedString(for: block.text)
+        guard !query.isEmpty else { return base }
+
+        let mutable = NSMutableAttributedString(base)
+        let nsText = block.text as NSString
+        let fullRange = NSRange(location: 0, length: nsText.length)
+        let regexPattern = NSRegularExpression.escapedPattern(for: query)
+        guard let regex = try? NSRegularExpression(pattern: regexPattern, options: [.caseInsensitive]) else {
+            return base
+        }
+
+        let isCurrentSearchBlock = currentSearchLine.map { (block.lineStart...block.lineEnd).contains($0) } ?? false
+
+        for (index, match) in regex.matches(in: block.text, range: fullRange).enumerated() {
+            let isPrimaryMatch = isCurrentSearchBlock && index == 0
+            mutable.addAttributes(
+                [
+                    .backgroundColor: NSColor.systemYellow.withAlphaComponent(isPrimaryMatch ? 0.38 : 0.18),
+                    .foregroundColor: NSColor.labelColor
+                ],
+                range: match.range
+            )
+        }
+
+        return AttributedString(mutable)
+    }
+
+    static func codeFenceLanguage(in text: String) -> String {
+        let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        let language = firstLine.trimmingCharacters(in: .whitespaces).dropFirst(3).trimmingCharacters(in: .whitespaces)
+        return language.isEmpty ? "代码块" : language.uppercased()
+    }
+
+    static func links(in text: String) -> [PreviewLinkItem] {
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        return linkRegex.matches(in: text, range: range).compactMap { match in
+            let title = nsText.substring(with: match.range(at: 1))
+            let rawURL = nsText.substring(with: match.range(at: 2))
+            guard let destination = URL(string: rawURL) else { return nil }
+            return PreviewLinkItem(
+                title: title,
+                destination: destination,
+                markdown: nsText.substring(with: match.range)
+            )
+        }
+    }
+
+    static func imageItem(in block: MarkdownBlock, imageURLResolver: (String) -> URL?) -> PreviewImageItem? {
+        let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let nsText = trimmed as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        guard let match = imageRegex.firstMatch(in: trimmed, range: range) else { return nil }
+
+        let source = nsText.substring(with: match.range(at: 2))
+        return PreviewImageItem(
+            alt: nsText.substring(with: match.range(at: 1)),
+            source: source,
+            url: imageURLResolver(source)
+        )
+    }
+
+    static func taskItems(in block: MarkdownBlock) -> [PreviewTaskItem] {
+        block.text
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .enumerated()
+            .compactMap { index, line in
+                guard let parts = taskMatch(in: String(line)) else { return nil }
+                return PreviewTaskItem(
+                    lineNumber: block.lineStart + index,
+                    text: parts.text,
+                    isCompleted: parts.isCompleted
+                )
+            }
+    }
+
+    private static func taskMatch(in line: String) -> (prefix: String, isCompleted: Bool, suffix: String, text: String)? {
+        guard let regex = try? NSRegularExpression(pattern: #"^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.*)$"#) else {
+            return nil
+        }
+
+        let nsLine = line as NSString
+        let fullRange = NSRange(location: 0, length: nsLine.length)
+        guard let match = regex.firstMatch(in: line, range: fullRange) else { return nil }
+
+        return (
+            prefix: nsLine.substring(with: match.range(at: 1)),
+            isCompleted: nsLine.substring(with: match.range(at: 2)).lowercased() == "x",
+            suffix: nsLine.substring(with: match.range(at: 3)),
+            text: nsLine.substring(with: match.range(at: 4))
+        )
+    }
+}
+
 private struct EditorDocumentAnalysisSnapshot {
     let text: String
     let blocks: [MarkdownBlock]
@@ -188,6 +354,12 @@ struct EditorRootView: View {
     @State private var analysisSnapshot = EditorDocumentAnalysisSnapshot.analyze(MarkdownDocument().text)
     @State private var pendingAnalysisRefreshTask: Task<Void, Never>?
     @State private var searchSnapshot = EditorSearchSnapshot.analyze(text: MarkdownDocument().text, query: "")
+    @State private var previewSnapshot = EditorDocumentPreviewSnapshot(
+        text: "",
+        query: "",
+        currentSearchLine: nil,
+        blocksByID: [:]
+    )
     @State private var tableEditingContext: TableEditingContext?
     @StateObject private var autoSaveManager = AutoSaveManager.shared
     @State private var lastSavedText = ""
@@ -322,6 +494,10 @@ struct EditorRootView: View {
         analysisSnapshot.lineCount
     }
 
+    private var previewBlocksByID: [String: PreviewBlockSnapshot] {
+        previewSnapshot.blocksByID
+    }
+
     private var wordCount: Int {
         analysisSnapshot.wordCount
     }
@@ -407,6 +583,7 @@ struct EditorRootView: View {
         .onAppear {
             scheduleAnalysisSnapshotRefresh(for: document.text, mode: .immediate)
             refreshSearchSnapshot(for: document.text, query: searchText)
+            refreshPreviewSnapshot()
             viewMode = preferences.viewMode
             editMode = preferences.editMode
             lastSavedText = document.text
@@ -435,6 +612,7 @@ struct EditorRootView: View {
         .onChange(of: document.text) { oldValue, newValue in
             scheduleAnalysisSnapshotRefresh(for: newValue, mode: analysisRefreshMode(for: oldValue, newValue))
             refreshSearchSnapshot(for: newValue, query: searchText)
+            refreshPreviewSnapshot()
             if currentSearchIndex >= searchMatches.count {
                 currentSearchIndex = max(0, searchMatches.count - 1)
             }
@@ -443,6 +621,7 @@ struct EditorRootView: View {
         }
         .onChange(of: searchText) { _, _ in
             refreshSearchSnapshot(for: document.text, query: searchText)
+            refreshPreviewSnapshot()
             currentSearchIndex = 0
             syncSearchLocation()
         }
@@ -744,7 +923,7 @@ struct EditorRootView: View {
         case .table:
             previewTableView(block)
         case .image:
-            if let image = imageItem(in: block) {
+            if let image = previewBlocksByID[block.id]?.image {
                 previewImageView(block, image: image)
             } else {
                 previewTextBlockView(block)
@@ -755,12 +934,13 @@ struct EditorRootView: View {
     }
 
     private func previewTextBlockView(_ block: MarkdownBlock) -> some View {
-        let links = previewLinks(in: block.text)
+        let snapshot = previewBlocksByID[block.id]
+        let links = snapshot?.links ?? []
 
         return VStack(alignment: .leading, spacing: 10) {
             blockHeader(for: block, allowInlineEdit: true)
 
-            Text(highlightedMarkdownAttributedString(for: block))
+            Text(snapshot?.attributedText ?? PreviewParsing.markdownAttributedString(for: block.text))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .opacity(isBlockCurrent(block) ? 1 : 0.96)
@@ -858,10 +1038,12 @@ struct EditorRootView: View {
     }
 
     private func previewTaskListView(_ block: MarkdownBlock) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = previewBlocksByID[block.id]?.taskItems ?? []
+
+        return VStack(alignment: .leading, spacing: 10) {
             blockHeader(for: block, allowInlineEdit: true)
 
-            ForEach(taskItems(in: block)) { item in
+            ForEach(items) { item in
                 Button {
                     executeDocumentCommand(.toggleTaskItem(lineNumber: item.lineNumber))
                 } label: {
@@ -893,11 +1075,13 @@ struct EditorRootView: View {
     }
 
     private func previewCodeFenceView(_ block: MarkdownBlock) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let language = previewBlocksByID[block.id]?.codeFenceLanguage ?? PreviewParsing.codeFenceLanguage(in: block.text)
+
+        return VStack(alignment: .leading, spacing: 12) {
             blockHeader(for: block, allowInlineEdit: true)
 
             HStack {
-                Label(codeFenceLanguage(in: block.text), systemImage: "curlybraces.square")
+                Label(language, systemImage: "curlybraces.square")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -931,7 +1115,7 @@ struct EditorRootView: View {
     }
 
     private func previewTableView(_ block: MarkdownBlock) -> some View {
-        let parsedTable = MarkdownTable.parse(from: block.text)
+        let parsedTable = previewBlocksByID[block.id]?.table
 
         return VStack(alignment: .leading, spacing: 12) {
             blockHeader(for: block, allowInlineEdit: false)
@@ -1120,7 +1304,7 @@ struct EditorRootView: View {
                 .buttonStyle(.borderless)
             } else if block.kind == .image {
                 Button("编辑图片") {
-                    if let image = imageItem(in: block) {
+                    if let image = previewBlocksByID[block.id]?.image {
                         beginEditingImage(image, at: block.lineStart)
                     }
                 }
@@ -1400,54 +1584,11 @@ struct EditorRootView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func markdownAttributedString(for markdown: String) -> AttributedString {
-        do {
-            return try AttributedString(
-                markdown: markdown.isEmpty ? " " : markdown,
-                options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .full,
-                    failurePolicy: .returnPartiallyParsedIfPossible
-                )
-            )
-        } catch {
-            return AttributedString(markdown)
-        }
-    }
-
-    private func highlightedMarkdownAttributedString(for block: MarkdownBlock) -> AttributedString {
-        let base = markdownAttributedString(for: block.text)
-        guard let query = searchText.nonEmpty else { return base }
-
-        let mutable = NSMutableAttributedString(base)
-        let nsText = block.text as NSString
-        let fullRange = NSRange(location: 0, length: nsText.length)
-        let regexPattern = NSRegularExpression.escapedPattern(for: query)
-        guard let regex = try? NSRegularExpression(pattern: regexPattern, options: [.caseInsensitive]) else {
-            return base
-        }
-
-        let currentLine = currentSearchLine
-        let isCurrentSearchBlock = currentLine.map { (block.lineStart...block.lineEnd).contains($0) } ?? false
-
-        for (index, match) in regex.matches(in: block.text, range: fullRange).enumerated() {
-            let isPrimaryMatch = isCurrentSearchBlock && index == 0
-            mutable.addAttributes(
-                [
-                    .backgroundColor: NSColor.systemYellow.withAlphaComponent(isPrimaryMatch ? 0.38 : 0.18),
-                    .foregroundColor: NSColor.labelColor
-                ],
-                range: match.range
-            )
-        }
-
-        return AttributedString(mutable)
-    }
-
     private func beginEditingBlock(_ block: MarkdownBlock) {
         guard isInlineEditable(block) else {
             if block.kind == .table {
                 beginEditingTable(block)
-            } else if block.kind == .image, let image = imageItem(in: block) {
+            } else if block.kind == .image, let image = previewBlocksByID[block.id]?.image {
                 beginEditingImage(image, at: block.lineStart)
             }
             return
@@ -1632,49 +1773,6 @@ struct EditorRootView: View {
 
     private func openURL(_ url: URL) {
         NSWorkspace.shared.open(url)
-    }
-
-    private func codeFenceLanguage(in text: String) -> String {
-        let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-        let language = firstLine.trimmingCharacters(in: .whitespaces).dropFirst(3).trimmingCharacters(in: .whitespaces)
-        return language.isEmpty ? "代码块" : language.uppercased()
-    }
-
-    private func previewLinks(in text: String) -> [PreviewLinkItem] {
-        guard let regex = try? NSRegularExpression(pattern: #"\[([^\]]+)\]\(([^)]+)\)"#) else {
-            return []
-        }
-
-        let nsText = text as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        return regex.matches(in: text, range: range).compactMap { match in
-            let title = nsText.substring(with: match.range(at: 1))
-            let rawURL = nsText.substring(with: match.range(at: 2))
-            guard let destination = URL(string: rawURL) else { return nil }
-            return PreviewLinkItem(
-                title: title,
-                destination: destination,
-                markdown: nsText.substring(with: match.range)
-            )
-        }
-    }
-
-    private func imageItem(in block: MarkdownBlock) -> PreviewImageItem? {
-        let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let regex = try? NSRegularExpression(pattern: #"^!\[([^\]]*)\]\(([^)]+)\)$"#) else {
-            return nil
-        }
-
-        let nsText = trimmed as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        guard let match = regex.firstMatch(in: trimmed, range: range) else { return nil }
-
-        let source = nsText.substring(with: match.range(at: 2))
-        return PreviewImageItem(
-            alt: nsText.substring(with: match.range(at: 1)),
-            source: source,
-            url: imageURL(from: source)
-        )
     }
 
     private func localImage(for source: String) -> NSImage? {
@@ -2065,20 +2163,6 @@ struct EditorRootView: View {
         }
     }
 
-    private func taskItems(in block: MarkdownBlock) -> [PreviewTaskItem] {
-        block.text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .compactMap { index, line in
-                guard let parts = taskMatch(in: String(line)) else { return nil }
-                return PreviewTaskItem(
-                    lineNumber: block.lineStart + index,
-                    text: parts.text,
-                    isCompleted: parts.isCompleted
-                )
-            }
-    }
-
     private func toggleTaskItem(at lineNumber: Int) {
         guard let mutation = EditorDocumentController.toggleTaskItem(in: document.text, lineNumber: lineNumber) else { return }
         applyMutation(mutation)
@@ -2133,20 +2217,23 @@ struct EditorRootView: View {
         searchSnapshot = EditorSearchSnapshot.analyze(text: text, query: query)
     }
 
-    private func taskMatch(in line: String) -> (prefix: String, isCompleted: Bool, suffix: String, text: String)? {
-        guard let regex = try? NSRegularExpression(pattern: #"^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.*)$"#) else {
-            return nil
-        }
+    private func refreshPreviewSnapshot() {
+        let previewBlocks = analysisSnapshot.text == document.text ? blocks : MarkdownAnalysis.blocks(in: document.text)
+        let documentFingerprint = previewBlocks.map(\.id).joined(separator: "|") + "::" + previewBlocks.map(\.text).joined(separator: "\u{1F}")
+        let normalizedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentLine = currentSearchLine
 
-        let nsLine = line as NSString
-        let fullRange = NSRange(location: 0, length: nsLine.length)
-        guard let match = regex.firstMatch(in: line, range: fullRange) else { return nil }
+        guard
+            previewSnapshot.text != documentFingerprint ||
+            previewSnapshot.query != normalizedQuery ||
+            previewSnapshot.currentSearchLine != currentLine
+        else { return }
 
-        return (
-            prefix: nsLine.substring(with: match.range(at: 1)),
-            isCompleted: nsLine.substring(with: match.range(at: 2)).lowercased() == "x",
-            suffix: nsLine.substring(with: match.range(at: 3)) + nsLine.substring(with: match.range(at: 4)),
-            text: nsLine.substring(with: match.range(at: 4))
+        previewSnapshot = EditorDocumentPreviewSnapshot.analyze(
+            blocks: previewBlocks,
+            query: normalizedQuery,
+            currentSearchLine: currentLine,
+            imageURLResolver: imageURL(from:)
         )
     }
 
