@@ -15,6 +15,8 @@ enum MarkdownBlockKind: String, Equatable {
     case taskList
     case quote
     case codeFence
+    case table
+    case image
     case thematicBreak
 }
 
@@ -58,8 +60,12 @@ struct MarkdownHeadingSection: Identifiable, Equatable {
 }
 
 enum MarkdownAnalysis {
+    static func lines(in text: String) -> [String] {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
     static func blocks(in text: String) -> [MarkdownBlock] {
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let lines = lines(in: text)
         var index = 0
         var blocks: [MarkdownBlock] = []
 
@@ -96,10 +102,42 @@ enum MarkdownAnalysis {
                 continue
             }
 
+            if isTableStart(at: index, in: lines) {
+                let start = index
+                index += 2
+
+                while index < lines.count, isTableRow(lines[index]) {
+                    index += 1
+                }
+
+                blocks.append(
+                    MarkdownBlock(
+                        kind: .table,
+                        lineStart: start + 1,
+                        lineEnd: index,
+                        text: lines[start..<index].joined(separator: "\n")
+                    )
+                )
+                continue
+            }
+
             if isHeading(trimmed) {
                 blocks.append(
                     MarkdownBlock(
                         kind: .heading,
+                        lineStart: lineNumber,
+                        lineEnd: lineNumber,
+                        text: line
+                    )
+                )
+                index += 1
+                continue
+            }
+
+            if isImage(trimmed) {
+                blocks.append(
+                    MarkdownBlock(
+                        kind: .image,
                         lineStart: lineNumber,
                         lineEnd: lineNumber,
                         text: line
@@ -204,7 +242,7 @@ enum MarkdownAnalysis {
 
     static func headingSections(in text: String) -> [MarkdownHeadingSection] {
         let headings = headings(in: text)
-        let totalLineCount = max(1, text.split(separator: "\n", omittingEmptySubsequences: false).count)
+        let totalLineCount = max(1, lines(in: text).count)
 
         return headings.enumerated().map { index, heading in
             let nextSiblingOrParent = headings.dropFirst(index + 1).first(where: { $0.level <= heading.level })
@@ -218,9 +256,39 @@ enum MarkdownAnalysis {
         }
     }
 
+    static func replaceBlock(_ block: MarkdownBlock, with replacement: String, in text: String) -> String {
+        var lines = lines(in: text)
+        let startIndex = block.lineStart - 1
+        let endIndex = block.lineEnd - 1
+        guard startIndex >= 0, endIndex < lines.count, startIndex <= endIndex else { return text }
+
+        lines.replaceSubrange(
+            startIndex...endIndex,
+            with: replacement.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        )
+        return lines.joined(separator: "\n")
+    }
+
+    static func replaceLine(_ lineNumber: Int, with replacement: String, in text: String) -> String {
+        var lines = lines(in: text)
+        let index = lineNumber - 1
+        guard lines.indices.contains(index) else { return text }
+        lines[index] = replacement
+        return lines.joined(separator: "\n")
+    }
+
+    static func insertBlock(_ markdown: String, afterLine lineNumber: Int, in text: String) -> String {
+        var lines = lines(in: text)
+        let insertIndex = max(0, min(lineNumber, lines.count))
+        let insertedLines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        lines.insert(contentsOf: insertedLines, at: insertIndex)
+        return lines.joined(separator: "\n")
+    }
+
     private static func isStructural(_ trimmedLine: String) -> Bool {
         isHeading(trimmedLine) ||
         isThematicBreak(trimmedLine) ||
+        isImage(trimmedLine) ||
         trimmedLine.hasPrefix(">") ||
         trimmedLine.hasPrefix("```") ||
         listKind(for: trimmedLine) != nil
@@ -233,6 +301,10 @@ enum MarkdownAnalysis {
 
     private static func isThematicBreak(_ trimmedLine: String) -> Bool {
         ["---", "***", "___"].contains(trimmedLine)
+    }
+
+    private static func isImage(_ trimmedLine: String) -> Bool {
+        matches(trimmedLine, pattern: #"^!\[[^\]]*\]\(([^)]+)\)$"#)
     }
 
     private static func blockKind(for trimmedLine: String) -> MarkdownBlockKind? {
@@ -256,6 +328,29 @@ enum MarkdownAnalysis {
         }
 
         return nil
+    }
+
+    private static func isTableStart(at index: Int, in lines: [String]) -> Bool {
+        guard index + 1 < lines.count else { return false }
+        return isTableRow(lines[index]) && isTableAlignmentRow(lines[index + 1])
+    }
+
+    private static func isTableRow(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("|") && trimmed.hasSuffix("|") && trimmed.count > 2
+    }
+
+    private static func isTableAlignmentRow(_ line: String) -> Bool {
+        guard isTableRow(line) else { return false }
+
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let cells = trimmed.dropFirst().dropLast().split(separator: "|", omittingEmptySubsequences: true)
+        guard !cells.isEmpty else { return false }
+
+        return cells.allSatisfy { cell in
+            let value = cell.trimmingCharacters(in: .whitespaces)
+            return !value.isEmpty && value.allSatisfy { $0 == "-" || $0 == ":" }
+        }
     }
 
     private static func matches(_ text: String, pattern: String) -> Bool {

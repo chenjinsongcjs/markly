@@ -1,0 +1,169 @@
+{
+  "" : {
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/Markly-primary.dia",
+    "emit-module-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/Markly-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/Markly-primary-emit-module.dia",
+    "pch" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/Markly-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/Markly-primary.swiftdeps"
+  },
+  "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/AutoSaveManager.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/AutoSaveManager~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/DocumentExporter.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/DocumentExporter~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/EditorMode.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorMode~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/EditorPreferences.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorPreferences~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/EditorRootView.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/EditorRootView~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownAnalysis.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownAnalysis~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownDocument.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownDocument~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownEditorCommands.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownEditorCommands~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownRenderer.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownRenderer~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownSyntaxHighlighter.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownSyntaxHighlighter~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarkdownTable.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarkdownTable~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/MarklyApp.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/MarklyApp~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/NativeMarkdownEditor.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/NativeMarkdownEditor~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/StatusBarView.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/StatusBarView~partial.swiftmodule"
+  },
+  "/Users/chenjinsong/xcode/Markly/Markly/TableEditorView.swift" : {
+    "const-values" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.swiftconstvalues",
+    "dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.d",
+    "diagnostics" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.dia",
+    "index-unit-output-path" : "/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.o",
+    "llvm-bc" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.bc",
+    "object" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.o",
+    "swift-dependencies" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView.swiftdeps",
+    "swiftmodule" : "/Users/chenjinsong/xcode/Markly/.build/DerivedData/Build/Intermediates.noindex/Markly.build/Debug/Markly.build/Objects-normal/arm64/TableEditorView~partial.swiftmodule"
+  }
+}

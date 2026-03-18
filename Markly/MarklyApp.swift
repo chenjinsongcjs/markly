@@ -11,7 +11,7 @@ import SwiftUI
 struct MarklyApp: App {
     var body: some Scene {
         DocumentGroup(newDocument: MarkdownDocument()) { file in
-            EditorRootView(document: file.$document)
+            EditorRootView(document: file.$document, fileURL: file.fileURL)
         }
     }
 }

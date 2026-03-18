@@ -8,6 +8,7 @@
 import Foundation
 
 enum MarkdownEditorCommand: String {
+    // 格式化命令
     case heading
     case bold
     case italic
@@ -20,6 +21,16 @@ enum MarkdownEditorCommand: String {
     case toggleTaskCompletion
     case insertLink
     case insertImage
+
+    // 模式切换命令
+    case toggleViewMode
+    case toggleEditMode
+    case switchToNormalMode
+    case switchToFocusMode
+    case switchToTypewriterMode
+    case switchToSourceMode
+    case switchToWysiwygMode
+    case switchToSplitMode
 }
 
 struct MarkdownEditorCommandRequest {

@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import QuartzCore
 
 struct EditorSelectionState: Equatable {
     var line = 1
@@ -21,13 +22,16 @@ struct NativeMarkdownEditor: NSViewRepresentable {
     @Binding var revealedLine: Int?
     var highlightedLineRange: ClosedRange<Int>?
     var softFoldedLineRanges: [ClosedRange<Int>] = []
+    var editMode: EditorEditMode = .normal
+    var fontSize: CGFloat = 14
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             text: $text,
             selectionState: $selectionState,
             requestedLine: $requestedLine,
-            revealedLine: $revealedLine
+            revealedLine: $revealedLine,
+            editMode: .constant(editMode)
         )
     }
 
@@ -69,7 +73,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.textContainer?.widthTracksTextView = true
-        textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.string = text
         textView.dropHandler = { [weak coordinator = context.coordinator] urls, point in
             coordinator?.handleDroppedFiles(urls, at: point)
@@ -101,6 +105,10 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             textView.delegate = context.coordinator
         }
 
+        context.coordinator.editMode = editMode
+        if textView.font?.pointSize != fontSize {
+            textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        }
         context.coordinator.applyStructureAnnotations(
             highlightedLineRange: highlightedLineRange,
             softFoldedLineRanges: softFoldedLineRanges
@@ -113,6 +121,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         @Binding private var selectionState: EditorSelectionState
         @Binding private var requestedLine: Int?
         @Binding private var revealedLine: Int?
+        @Binding var editMode: EditorEditMode
         private let highlighter = MarkdownSyntaxHighlighter()
         private var lastHandledRequestedLine: Int?
         private var observers: [NSObjectProtocol] = []
@@ -122,12 +131,14 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             text: Binding<String>,
             selectionState: Binding<EditorSelectionState>,
             requestedLine: Binding<Int?>,
-            revealedLine: Binding<Int?>
+            revealedLine: Binding<Int?>,
+            editMode: Binding<EditorEditMode>
         ) {
             _text = text
             _selectionState = selectionState
             _requestedLine = requestedLine
             _revealedLine = revealedLine
+            _editMode = editMode
             super.init()
             registerForEditorCommands()
         }
@@ -146,6 +157,11 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView else { return }
             updateSelectionState(for: textView)
+
+            // 在打字机模式下，光标移动时自动滚动
+            if editMode == .typewriter {
+                centerCursorVertically(in: textView)
+            }
         }
 
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
@@ -196,6 +212,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: fullRange)
             layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: fullRange)
 
+            // 应用标题高亮
             if let highlightedLineRange,
                let range = characterRange(forLines: highlightedLineRange, in: nsText) {
                 layoutManager.addTemporaryAttributes(
@@ -204,6 +221,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
                 )
             }
 
+            // 应用折叠淡化
             for foldedRange in softFoldedLineRanges {
                 guard let range = characterRange(forLines: foldedRange, in: nsText) else { continue }
                 layoutManager.addTemporaryAttributes(
@@ -213,6 +231,11 @@ struct NativeMarkdownEditor: NSViewRepresentable {
                     ],
                     forCharacterRange: range
                 )
+            }
+
+            // 应用专注模式注解
+            if editMode == .focus {
+                applyFocusModeAnnotations(in: textView, layoutManager: layoutManager, nsText: nsText)
             }
         }
 
@@ -520,6 +543,10 @@ struct NativeMarkdownEditor: NSViewRepresentable {
                 insertLink(in: textView, payload: payload)
             case .insertImage:
                 insertImage(in: textView, payload: payload)
+            case .toggleViewMode, .toggleEditMode,
+                 .switchToNormalMode, .switchToFocusMode, .switchToTypewriterMode,
+                 .switchToSourceMode, .switchToWysiwygMode, .switchToSplitMode:
+                break
             }
         }
 
@@ -774,6 +801,88 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             let clampedLocation = min(max(0, location), text.length)
             let prefix = text.substring(to: clampedLocation)
             return max(1, prefix.split(separator: "\n", omittingEmptySubsequences: false).count)
+        }
+
+        // MARK: - Focus Mode
+
+        /// 应用专注模式注解：高亮当前段落，淡化其他内容
+        private func applyFocusModeAnnotations(
+            in textView: NSTextView,
+            layoutManager: NSLayoutManager,
+            nsText: NSString
+        ) {
+            var currentParagraphStart: Int = 0
+            var currentParagraphEnd: Int = 0
+
+            // 找到当前段落范围
+            let selectedRange = textView.selectedRange()
+            let paragraphRange = nsText.paragraphRange(for: selectedRange)
+            currentParagraphStart = paragraphRange.location
+            currentParagraphEnd = NSMaxRange(paragraphRange)
+
+            // 淡化所有内容
+            let fullRange = NSRange(location: 0, length: nsText.length)
+            layoutManager.addTemporaryAttributes(
+                [.foregroundColor: NSColor.secondaryLabelColor.withAlphaComponent(0.5)],
+                forCharacterRange: fullRange
+            )
+
+            // 高亮当前段落
+            let currentParagraphRange = NSRange(location: currentParagraphStart, length: currentParagraphEnd - currentParagraphStart)
+            layoutManager.addTemporaryAttributes(
+                [.foregroundColor: NSColor.labelColor],
+                forCharacterRange: currentParagraphRange
+            )
+
+            // 添加高亮背景
+            layoutManager.addTemporaryAttributes(
+                [.backgroundColor: NSColor.controlAccentColor.withAlphaComponent(EditorPreferences.shared.focusModeHighlightOpacity)],
+                forCharacterRange: currentParagraphRange
+            )
+        }
+
+        // MARK: - Typewriter Mode
+
+        /// 打字机模式：将光标垂直居中
+        private func centerCursorVertically(in textView: NSTextView) {
+            guard let scrollView = textView.enclosingScrollView else { return }
+
+            let selectedRange = textView.selectedRange()
+            guard selectedRange.location < textView.string.utf16.count else { return }
+
+            guard
+                let layoutManager = textView.layoutManager,
+                let textContainer = textView.textContainer
+            else { return }
+
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: selectedRange, actualCharacterRange: nil)
+            let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+            let cursorPosition = glyphRect.midY
+
+            let visibleHeight = scrollView.documentVisibleRect.height
+            let targetOffset = cursorPosition - visibleHeight / 2
+
+            let newOrigin = NSPoint(
+                x: scrollView.documentVisibleRect.origin.x,
+                y: max(0, targetOffset)
+            )
+
+            // 平滑滚动到目标位置
+            let currentOrigin = scrollView.documentVisibleRect.origin
+            let distance = abs(currentOrigin.y - newOrigin.y)
+
+            // 如果距离较小，直接滚动；如果距离较大，使用动画
+            if distance < 100 {
+                scrollView.contentView.scroll(to: newOrigin)
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+            } else {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.15
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    scrollView.contentView.animator().setBoundsOrigin(newOrigin)
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                }
+            }
         }
     }
 }
