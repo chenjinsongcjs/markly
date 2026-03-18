@@ -1,2 +1,0 @@
-Target dependency graph (1 target)
-Target 'Markly' in project 'Markly' (no dependencies)
