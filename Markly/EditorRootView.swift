@@ -44,7 +44,7 @@ private enum EditorInsertSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
-private enum BlockMoveDirection {
+enum BlockMoveDirection {
     case up
     case down
 }
@@ -1644,9 +1644,13 @@ struct EditorRootView: View {
     }
 
     private func replaceLine(_ lineNumber: Int, with replacement: String) {
-        document.text = MarkdownAnalysis.replaceLine(lineNumber, with: replacement, in: document.text)
-        requestedLine = lineNumber
-        revealedLine = lineNumber
+        applyMutation(
+            EditorDocumentController.replaceLine(
+                in: document.text,
+                lineNumber: lineNumber,
+                replacement: replacement
+            )
+        )
     }
 
     private func configureAutoSaveIfNeeded() {
@@ -1806,9 +1810,13 @@ struct EditorRootView: View {
     }
 
     private func replaceBlock(_ block: MarkdownBlock, with replacement: String) {
-        document.text = MarkdownAnalysis.replaceBlock(block, with: replacement, in: document.text)
-        requestedLine = block.lineStart
-        revealedLine = block.lineStart
+        applyMutation(
+            EditorDocumentController.replaceBlock(
+                in: document.text,
+                block: block,
+                replacement: replacement
+            )
+        )
     }
 
     private func insertParagraph(after block: MarkdownBlock) {
@@ -1817,10 +1825,14 @@ struct EditorRootView: View {
 
     private func insertBlockAfter(_ block: MarkdownBlock, markdown: String, focusLineOffset: Int) {
         let insertionBlock = blocks.first(where: { $0.id == block.id }) ?? block
-        document.text = MarkdownAnalysis.insertBlock(markdown, afterLine: insertionBlock.lineEnd, in: document.text)
-        let line = insertionBlock.lineEnd + focusLineOffset
-        requestedLine = line
-        revealedLine = line
+        let mutation = EditorDocumentController.insertBlock(
+            in: document.text,
+            after: insertionBlock,
+            markdown: markdown,
+            focusLineOffset: focusLineOffset
+        )
+        applyMutation(mutation)
+        let line = mutation.focusLine
         if let newBlock = MarkdownAnalysis.block(containingLine: line, in: document.text), isInlineEditable(newBlock) {
             activeEditingBlockID = newBlock.id
             editingBlockText = newBlock.text
@@ -1847,18 +1859,12 @@ struct EditorRootView: View {
         guard isInlineEditable(previousBlock) else { return }
 
         let mergedText = mergedBlockText(previous: previousBlock, current: block)
-        var lines = MarkdownAnalysis.lines(in: document.text)
-        let previousStart = max(0, previousBlock.lineStart - 1)
-        let currentEnd = min(lines.count - 1, block.lineEnd - 1)
-        let mergedLines = mergedText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        lines.replaceSubrange(previousStart...currentEnd, with: mergedLines)
-        document.text = lines.joined(separator: "\n")
+        guard let mutation = EditorDocumentController.mergeBlocks(in: document.text, previous: previousBlock, current: block) else {
+            return
+        }
+        applyMutation(mutation)
 
-        let focusLine = previousBlock.lineStart
-        requestedLine = focusLine
-        revealedLine = focusLine
-
-        if let updatedBlock = MarkdownAnalysis.block(containingLine: focusLine, in: document.text), isInlineEditable(updatedBlock) {
+        if let updatedBlock = MarkdownAnalysis.block(containingLine: mutation.focusLine, in: document.text), isInlineEditable(updatedBlock) {
             activeEditingBlockID = updatedBlock.id
             editingBlockText = updatedBlock.text
             blockEditorSelection = NSRange(location: mergeSelectionOffset(in: mergedText, previousText: previousBlock.text), length: 0)
@@ -1974,87 +1980,18 @@ struct EditorRootView: View {
     }
 
     private func deleteBlock(_ block: MarkdownBlock) {
-        var lines = MarkdownAnalysis.lines(in: document.text)
-        let startIndex = block.lineStart - 1
-        let endIndex = block.lineEnd - 1
-        guard startIndex >= 0, endIndex < lines.count, startIndex <= endIndex else { return }
-
-        lines.removeSubrange(startIndex...endIndex)
-
-        if startIndex > 0, startIndex < lines.count {
-            let previousIsBlank = lines[startIndex - 1].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            let currentIsBlank = lines[startIndex].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if previousIsBlank && currentIsBlank {
-                lines.remove(at: startIndex)
-            }
-        }
-
-        document.text = lines.joined(separator: "\n")
-        let newLine = max(1, min(startIndex + 1, max(1, lines.count)))
-        requestedLine = newLine
-        revealedLine = newLine
+        guard let mutation = EditorDocumentController.deleteBlock(in: document.text, block: block) else { return }
+        applyMutation(mutation)
     }
 
     private func duplicateBlock(_ block: MarkdownBlock) {
-        var lines = MarkdownAnalysis.lines(in: document.text)
-        let range = expandedBlockRange(for: block, in: lines)
-        let blockLines = Array(lines[range])
-        let insertionIndex = range.upperBound + 1
-        lines.insert(contentsOf: blockLines, at: insertionIndex)
-        document.text = lines.joined(separator: "\n")
-        let newLine = insertionIndex + 1
-        requestedLine = newLine
-        revealedLine = newLine
+        guard let mutation = EditorDocumentController.duplicateBlock(in: document.text, block: block) else { return }
+        applyMutation(mutation)
     }
 
     private func moveBlock(_ block: MarkdownBlock, direction: BlockMoveDirection) {
-        let allBlocks = blocks
-        guard let index = allBlocks.firstIndex(of: block) else { return }
-        let targetIndex = direction == .up ? index - 1 : index + 1
-        guard allBlocks.indices.contains(targetIndex) else { return }
-
-        var lines = MarkdownAnalysis.lines(in: document.text)
-        let blockRange = expandedBlockRange(for: block, in: lines)
-        let targetRange = expandedBlockRange(for: allBlocks[targetIndex], in: lines)
-        let blockLines = Array(lines[blockRange])
-        let targetLines = Array(lines[targetRange])
-
-        if direction == .up {
-            lines.removeSubrange(blockRange)
-            lines.removeSubrange(targetRange)
-            lines.insert(contentsOf: blockLines, at: targetRange.lowerBound)
-            lines.insert(contentsOf: targetLines, at: targetRange.lowerBound + blockLines.count)
-            let newLine = targetRange.lowerBound + 1
-            document.text = lines.joined(separator: "\n")
-            requestedLine = newLine
-            revealedLine = newLine
-        } else {
-            lines.removeSubrange(targetRange)
-            lines.removeSubrange(blockRange)
-            lines.insert(contentsOf: targetLines, at: blockRange.lowerBound)
-            lines.insert(contentsOf: blockLines, at: blockRange.lowerBound + targetLines.count)
-            let newLine = blockRange.lowerBound + targetLines.count + 1
-            document.text = lines.joined(separator: "\n")
-            requestedLine = newLine
-            revealedLine = newLine
-        }
-    }
-
-    private func expandedBlockRange(for block: MarkdownBlock, in lines: [String]) -> ClosedRange<Int> {
-        let start = max(0, block.lineStart - 1)
-        var end = min(lines.count - 1, block.lineEnd - 1)
-        var index = end + 1
-
-        while index < lines.count {
-            if lines[index].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                end = index
-                index += 1
-            } else {
-                break
-            }
-        }
-
-        return start...end
+        guard let mutation = EditorDocumentController.moveBlock(in: document.text, block: block, direction: direction) else { return }
+        applyMutation(mutation)
     }
 
     private func previewHeadingFont(for level: Int) -> Font {
@@ -2087,14 +2024,14 @@ struct EditorRootView: View {
     }
 
     private func toggleTaskItem(at lineNumber: Int) {
-        var lines = MarkdownAnalysis.lines(in: document.text)
-        let index = lineNumber - 1
-        guard lines.indices.contains(index), let parts = taskMatch(in: lines[index]) else { return }
+        guard let mutation = EditorDocumentController.toggleTaskItem(in: document.text, lineNumber: lineNumber) else { return }
+        applyMutation(mutation)
+    }
 
-        lines[index] = parts.prefix + (parts.isCompleted ? " " : "x") + parts.suffix
-        document.text = lines.joined(separator: "\n")
-        requestedLine = lineNumber
-        revealedLine = lineNumber
+    private func applyMutation(_ mutation: EditorDocumentMutation) {
+        document.text = mutation.text
+        requestedLine = mutation.focusLine
+        revealedLine = mutation.focusLine
     }
 
     private func taskMatch(in line: String) -> (prefix: String, isCompleted: Bool, suffix: String, text: String)? {
@@ -2167,13 +2104,25 @@ struct EditorRootView: View {
 
     private func replaceCurrentSearchMatch() {
         guard let match = currentSearchMatch else { return }
-        document.text.replaceSubrange(match.range, with: replaceText)
+        applyMutation(
+            EditorDocumentController.replaceCurrentSearchMatch(
+                in: document.text,
+                matchRange: match.range,
+                replacement: replaceText
+            )
+        )
         syncSearchLocation()
     }
 
     private func replaceAllSearchMatches() {
         guard let query = searchText.nonEmpty else { return }
-        document.text = document.text.replacingOccurrences(of: query, with: replaceText, options: .caseInsensitive)
+        applyMutation(
+            EditorDocumentController.replaceAllSearchMatches(
+                in: document.text,
+                query: query,
+                replacement: replaceText
+            )
+        )
         syncSearchLocation()
     }
 

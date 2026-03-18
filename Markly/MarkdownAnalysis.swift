@@ -68,24 +68,31 @@ enum MarkdownAnalysis {
         let lines = lines(in: text)
         var index = 0
         var blocks: [MarkdownBlock] = []
+        var activeFenceMarker: String?
 
         while index < lines.count {
             let lineNumber = index + 1
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let normalized = normalizeStructuralPrefix(in: trimmed)
 
             if trimmed.isEmpty {
                 index += 1
                 continue
             }
 
-            if trimmed.hasPrefix("```") {
+            if let fenceMarker = fenceMarker(for: normalized) {
                 let start = index
+                activeFenceMarker = fenceMarker
                 index += 1
 
                 while index < lines.count {
-                    if lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    let candidate = normalizeStructuralPrefix(
+                        in: lines[index].trimmingCharacters(in: .whitespaces)
+                    )
+                    if closesFence(candidate, marker: activeFenceMarker) {
                         index += 1
+                        activeFenceMarker = nil
                         break
                     }
                     index += 1
@@ -121,7 +128,7 @@ enum MarkdownAnalysis {
                 continue
             }
 
-            if isHeading(trimmed) {
+            if isHeading(normalized) {
                 blocks.append(
                     MarkdownBlock(
                         kind: .heading,
@@ -134,7 +141,7 @@ enum MarkdownAnalysis {
                 continue
             }
 
-            if isImage(trimmed) {
+            if isImage(normalized) {
                 blocks.append(
                     MarkdownBlock(
                         kind: .image,
@@ -147,7 +154,7 @@ enum MarkdownAnalysis {
                 continue
             }
 
-            if isThematicBreak(trimmed) {
+            if isThematicBreak(normalized) {
                 blocks.append(
                     MarkdownBlock(
                         kind: .thematicBreak,
@@ -160,10 +167,10 @@ enum MarkdownAnalysis {
                 continue
             }
 
-            if blockKind(for: trimmed) == .quote {
+            if isQuote(trimmed) {
                 let start = index
                 while index < lines.count,
-                      blockKind(for: lines[index].trimmingCharacters(in: .whitespaces)) == .quote {
+                      isQuote(lines[index].trimmingCharacters(in: .whitespaces)) {
                     index += 1
                 }
 
@@ -178,10 +185,15 @@ enum MarkdownAnalysis {
                 continue
             }
 
-            if let detectedListKind = listKind(for: trimmed) {
+            if let detectedListKind = listKind(for: normalized) {
                 let start = index
+                let baseIndent = listIndentLevel(for: line)
                 while index < lines.count,
-                      listKind(for: lines[index].trimmingCharacters(in: .whitespaces)) == detectedListKind {
+                      isContinuationOfListBlock(
+                          line: lines[index],
+                          detectedListKind: detectedListKind,
+                          baseIndent: baseIndent
+                      ) {
                     index += 1
                 }
 
@@ -199,7 +211,8 @@ enum MarkdownAnalysis {
             let start = index
             while index < lines.count {
                 let candidate = lines[index].trimmingCharacters(in: .whitespaces)
-                if candidate.isEmpty || isStructural(candidate) {
+                let normalizedCandidate = normalizeStructuralPrefix(in: candidate)
+                if candidate.isEmpty || isStructural(normalizedCandidate) {
                     break
                 }
                 index += 1
@@ -289,8 +302,8 @@ enum MarkdownAnalysis {
         isHeading(trimmedLine) ||
         isThematicBreak(trimmedLine) ||
         isImage(trimmedLine) ||
-        trimmedLine.hasPrefix(">") ||
-        trimmedLine.hasPrefix("```") ||
+        isQuote(trimmedLine) ||
+        fenceMarker(for: trimmedLine) != nil ||
         listKind(for: trimmedLine) != nil
     }
 
@@ -300,7 +313,8 @@ enum MarkdownAnalysis {
     }
 
     private static func isThematicBreak(_ trimmedLine: String) -> Bool {
-        ["---", "***", "___"].contains(trimmedLine)
+        let collapsed = trimmedLine.replacingOccurrences(of: " ", with: "")
+        return ["---", "***", "___"].contains(collapsed)
     }
 
     private static func isImage(_ trimmedLine: String) -> Bool {
@@ -308,10 +322,14 @@ enum MarkdownAnalysis {
     }
 
     private static func blockKind(for trimmedLine: String) -> MarkdownBlockKind? {
-        if trimmedLine.hasPrefix(">") {
+        if isQuote(trimmedLine) {
             return .quote
         }
         return listKind(for: trimmedLine)
+    }
+
+    private static func isQuote(_ trimmedLine: String) -> Bool {
+        trimmedLine.hasPrefix(">")
     }
 
     private static func listKind(for trimmedLine: String) -> MarkdownBlockKind? {
@@ -357,5 +375,53 @@ enum MarkdownAnalysis {
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
         let range = NSRange(location: 0, length: (text as NSString).length)
         return regex.firstMatch(in: text, range: range) != nil
+    }
+
+    private static func isContinuationOfListBlock(
+        line: String,
+        detectedListKind: MarkdownBlockKind,
+        baseIndent: Int
+    ) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let normalized = normalizeStructuralPrefix(in: trimmed)
+
+        guard let lineListKind = listKind(for: normalized) else {
+            return false
+        }
+
+        let currentIndent = listIndentLevel(for: line)
+        return lineListKind == detectedListKind || currentIndent > baseIndent
+    }
+
+    private static func listIndentLevel(for line: String) -> Int {
+        line.prefix { $0 == " " || $0 == "\t" }.count
+    }
+
+    private static func normalizeStructuralPrefix(in trimmedLine: String) -> String {
+        var working = trimmedLine
+
+        while working.hasPrefix(">") {
+            working.removeFirst()
+            working = working.trimmingCharacters(in: .whitespaces)
+        }
+
+        return working.trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func fenceMarker(for trimmedLine: String) -> String? {
+        if matches(trimmedLine, pattern: #"^```+"#) {
+            return "```"
+        }
+
+        if matches(trimmedLine, pattern: #"^~~~+"#) {
+            return "~~~"
+        }
+
+        return nil
+    }
+
+    private static func closesFence(_ trimmedLine: String, marker: String?) -> Bool {
+        guard let marker else { return false }
+        return trimmedLine.hasPrefix(marker)
     }
 }

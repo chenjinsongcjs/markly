@@ -73,4 +73,52 @@ final class MarkdownAnalysisTests: XCTestCase {
         XCTAssertEqual(sections[1].contentLineEnd, 4)
         XCTAssertEqual(sections[2].contentLineEnd, 6)
     }
+
+    func testBlocksRecognizeNestedListsAndQuotedLists() {
+        let markdown = """
+        - parent
+          - child
+          1. nested ordered
+
+        > - quoted bullet
+        > 1. quoted ordered
+        """
+
+        let blocks = MarkdownAnalysis.blocks(in: markdown)
+
+        XCTAssertEqual(blocks.map(\.kind), [.unorderedList, .quote])
+        XCTAssertEqual(blocks[0].lineStart, 1)
+        XCTAssertEqual(blocks[0].lineEnd, 3)
+        XCTAssertEqual(blocks[1].lineStart, 5)
+        XCTAssertEqual(blocks[1].lineEnd, 6)
+    }
+
+    func testCodeFenceWinsOverInnerMarkdownSyntax() {
+        let markdown = """
+        ```swift
+        # Not a heading
+        | not | a | table |
+        - not a list
+        ```
+        """
+
+        let blocks = MarkdownAnalysis.blocks(in: markdown)
+
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks.first?.kind, .codeFence)
+        XCTAssertEqual(blocks.first?.lineStart, 1)
+        XCTAssertEqual(blocks.first?.lineEnd, 5)
+    }
+
+    func testThematicBreakAllowsInternalWhitespace() {
+        let markdown = """
+        Paragraph
+
+        - - -
+        """
+
+        let blocks = MarkdownAnalysis.blocks(in: markdown)
+
+        XCTAssertEqual(blocks.map(\.kind), [.paragraph, .thematicBreak])
+    }
 }
