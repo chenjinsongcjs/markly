@@ -5,6 +5,7 @@
 //  Created by Codex on 2026/3/18.
 //
 
+import AppKit
 import SwiftUI
 
 /// 表格编辑视图
@@ -37,6 +38,16 @@ struct TableEditorView: View {
             actionToolbar
         }
         .frame(minWidth: 600, minHeight: 400)
+        .onAppear {
+            guard editingCell == nil, table.rowCount > 0, table.columnCount > 0 else { return }
+            setEditingCell(row: 0, column: 0)
+        }
+        .onChange(of: table.rowCount) { _, _ in
+            normalizeEditingCell()
+        }
+        .onChange(of: table.columnCount) { _, _ in
+            normalizeEditingCell()
+        }
         .onDisappear {
             saveChanges()
         }
@@ -166,25 +177,29 @@ struct TableEditorView: View {
 
     private func dataCell(row: Int, column: Int) -> some View {
         let key = "\(row)-\(column)"
+        let isFocused = editingCell?.row == row && editingCell?.column == column
 
-        return TextField("...", text: Binding(
-            get: { cellEdits[key] ?? table.rows[row][column] },
-            set: { cellEdits[key] = $0 }
-        ))
-        .textFieldStyle(.plain)
+        return TableCellTextField(
+            text: Binding(
+                get: { cellEdits[key] ?? table.rows[row][column] },
+                set: { cellEdits[key] = $0 }
+            ),
+            isFocused: isFocused,
+            onFocus: {
+                setEditingCell(row: row, column: column)
+            },
+            onSubmit: {
+                moveToNextCell(from: (row, column))
+            },
+            onNavigate: { direction in
+                handleNavigation(direction, from: TableCellCoordinate(row: row, column: column))
+            }
+        )
         .frame(width: 100, alignment: .leading)
         .padding(8)
         .background(
-            editingCell?.row == row && editingCell?.column == column ?
-            Color.accentColor.opacity(0.15) : Color.clear
+            isFocused ? Color.accentColor.opacity(0.15) : Color.clear
         )
-        .onTapGesture {
-            editingCell = (row: row, column: column)
-        }
-        .submitLabel(.next)
-        .onSubmit {
-            moveToNextCell(from: (row, column))
-        }
     }
 
     private func rowActionMenu(at index: Int) -> some View {
@@ -282,14 +297,21 @@ struct TableEditorView: View {
                 alignments: table.alignments
             )
         }
+
+        let targetRow = min(index, max(0, table.rowCount - 1))
+        if table.columnCount > 0, table.rowCount > 0 {
+            setEditingCell(row: targetRow, column: min(editingCell?.column ?? 0, table.columnCount - 1))
+        }
     }
 
     private func removeRow(at index: Int) {
         table = table.removeRow(at: index)
+        normalizeEditingCell()
     }
 
     private func removeColumn(at index: Int) {
         table = table.removeColumn(at: index)
+        normalizeEditingCell()
     }
 
     private func updateAlignment(at index: Int, to alignment: TableAlignment) {
@@ -310,19 +332,31 @@ struct TableEditorView: View {
     }
 
     private func moveToNextCell(from cell: (row: Int, column: Int)) {
-        let nextColumn = cell.column + 1
-        let nextRow = cell.row
+        handleNavigation(.forward, from: TableCellCoordinate(row: cell.row, column: cell.column))
+    }
 
-        if nextColumn < table.columnCount {
-            editingCell = (row: nextRow, column: nextColumn)
-        } else if nextRow + 1 < table.rowCount {
-            editingCell = (row: nextRow + 1, column: 0)
-        } else {
-            // 到达末尾，添加新行
+    private func applyNavigationResult(_ result: TableCellNavigationResult) {
+        switch result {
+        case .focus(let coordinate):
+            setEditingCell(row: coordinate.row, column: coordinate.column)
+        case .appendRowAndFocus(let coordinate):
             let newRow = Array(repeating: "", count: table.columnCount)
             table = table.addRow(newRow)
-            editingCell = (row: table.rowCount - 1, column: 0)
+            setEditingCell(row: coordinate.row, column: coordinate.column)
+        case .stay:
+            break
         }
+    }
+
+    private func handleNavigation(_ direction: TableCellNavigationDirection, from cell: TableCellCoordinate) {
+        applyNavigationResult(
+            TableCellNavigator.navigate(
+                from: cell,
+                direction: direction,
+                rowCount: table.rowCount,
+                columnCount: table.columnCount
+            )
+        )
     }
 
     private func saveChanges() {
@@ -352,6 +386,29 @@ struct TableEditorView: View {
         table.alignments
     }
 
+    private func setEditingCell(row: Int, column: Int) {
+        let coordinate = (row: row, column: column)
+        editingCell = coordinate
+        selectedCell = coordinate
+    }
+
+    private func normalizeEditingCell() {
+        guard table.rowCount > 0, table.columnCount > 0 else {
+            editingCell = nil
+            selectedCell = nil
+            return
+        }
+
+        guard let editingCell else {
+            setEditingCell(row: 0, column: 0)
+            return
+        }
+
+        let normalizedRow = min(max(0, editingCell.row), table.rowCount - 1)
+        let normalizedColumn = min(max(0, editingCell.column), table.columnCount - 1)
+        setEditingCell(row: normalizedRow, column: normalizedColumn)
+    }
+
     private func alignmentAsFrame(_ alignment: TableAlignment?) -> Alignment {
         switch alignment {
         case .left:
@@ -362,6 +419,132 @@ struct TableEditorView: View {
             return .trailing
         case nil:
             return .leading
+        }
+    }
+}
+
+private struct TableCellTextField: NSViewRepresentable {
+    @Binding var text: String
+    let isFocused: Bool
+    let onFocus: () -> Void
+    let onSubmit: () -> Void
+    let onNavigate: (TableCellNavigationDirection) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            text: $text,
+            onFocus: onFocus,
+            onSubmit: onSubmit,
+            onNavigate: onNavigate
+        )
+    }
+
+    func makeNSView(context: Context) -> NavigatingTableTextField {
+        let textField = NavigatingTableTextField()
+        textField.isBordered = false
+        textField.backgroundColor = .clear
+        textField.focusRingType = .none
+        textField.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textField.lineBreakMode = .byTruncatingTail
+        textField.delegate = context.coordinator
+        textField.navigationHandler = context.coordinator.handleNavigation
+        textField.focusHandler = context.coordinator.handleFocus
+        textField.submitHandler = context.coordinator.handleSubmit
+        textField.stringValue = text
+        return textField
+    }
+
+    func updateNSView(_ nsView: NavigatingTableTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+
+        nsView.navigationHandler = context.coordinator.handleNavigation
+        nsView.focusHandler = context.coordinator.handleFocus
+        nsView.submitHandler = context.coordinator.handleSubmit
+
+        if isFocused, nsView.window?.firstResponder != nsView.currentEditor() {
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        @Binding private var text: String
+        private let onFocus: () -> Void
+        private let onSubmit: () -> Void
+        private let onNavigate: (TableCellNavigationDirection) -> Void
+
+        init(
+            text: Binding<String>,
+            onFocus: @escaping () -> Void,
+            onSubmit: @escaping () -> Void,
+            onNavigate: @escaping (TableCellNavigationDirection) -> Void
+        ) {
+            _text = text
+            self.onFocus = onFocus
+            self.onSubmit = onSubmit
+            self.onNavigate = onNavigate
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let textField = obj.object as? NSTextField else { return }
+            text = textField.stringValue
+        }
+
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            onFocus()
+        }
+
+        func handleFocus() {
+            onFocus()
+        }
+
+        func handleSubmit() {
+            onSubmit()
+        }
+
+        func handleNavigation(_ direction: TableCellNavigationDirection) {
+            onNavigate(direction)
+        }
+    }
+}
+
+private final class NavigatingTableTextField: NSTextField {
+    var navigationHandler: ((TableCellNavigationDirection) -> Void)?
+    var focusHandler: (() -> Void)?
+    var submitHandler: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        if result {
+            focusHandler?()
+        }
+        return result
+    }
+
+    override func textDidBeginEditing(_ notification: Notification) {
+        super.textDidBeginEditing(notification)
+        focusHandler?()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch Int(event.keyCode) {
+        case 48:
+            navigationHandler?(event.modifierFlags.contains(.shift) ? .backward : .forward)
+        case 36, 76:
+            submitHandler?()
+        case 123:
+            navigationHandler?(.left)
+        case 124:
+            navigationHandler?(.right)
+        case 125:
+            navigationHandler?(.down)
+        case 126:
+            navigationHandler?(.up)
+        default:
+            super.keyDown(with: event)
         }
     }
 }

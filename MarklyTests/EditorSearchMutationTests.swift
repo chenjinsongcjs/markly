@@ -34,4 +34,38 @@ final class EditorSearchMutationTests: XCTestCase {
         XCTAssertEqual(mutation.text, "omega\nomega")
         XCTAssertEqual(mutation.focusLine, 1)
     }
+
+    func testReplaceCurrentSearchMatchOnlyChangesSelectedOccurrence() {
+        let markdown = """
+        alpha
+        alpha
+        """
+        let firstRange = markdown.range(of: "alpha")!
+
+        let mutation = EditorDocumentController.replaceCurrentSearchMatch(
+            in: markdown,
+            matchRange: firstRange,
+            replacement: "omega"
+        )
+
+        XCTAssertEqual(mutation.text, "omega\nalpha")
+        XCTAssertEqual(mutation.focusLine, 1)
+    }
+
+    func testReplaceAllSearchMatchesIsCaseInsensitiveAndUpdatesFocusLine() {
+        let markdown = """
+        beta
+        ALPHA
+        gamma alpha
+        """
+
+        let mutation = EditorDocumentController.replaceAllSearchMatches(
+            in: markdown,
+            query: "alpha",
+            replacement: "omega"
+        )
+
+        XCTAssertEqual(mutation.text, "beta\nomega\ngamma omega")
+        XCTAssertEqual(mutation.focusLine, 2)
+    }
 }

@@ -67,6 +67,7 @@ struct DocumentExporter {
     static func export(
         markdown: String,
         format: ExportFormat,
+        sourceDocumentURL: URL? = nil,
         suggestedURL: URL? = nil,
         completion: @escaping (Bool, URL?) -> Void
     ) {
@@ -87,9 +88,19 @@ struct DocumentExporter {
 
             switch format {
             case .html:
-                exportToHTML(markdown: markdown, to: finalURL, completion: completion)
+                exportToHTML(
+                    markdown: markdown,
+                    sourceDocumentURL: sourceDocumentURL,
+                    to: finalURL,
+                    completion: completion
+                )
             case .pdf:
-                exportToPDF(markdown: markdown, to: finalURL, completion: completion)
+                exportToPDF(
+                    markdown: markdown,
+                    sourceDocumentURL: sourceDocumentURL,
+                    to: finalURL,
+                    completion: completion
+                )
             }
         }
     }
@@ -97,10 +108,11 @@ struct DocumentExporter {
     /// 导出为 HTML
     private static func exportToHTML(
         markdown: String,
+        sourceDocumentURL: URL?,
         to url: URL,
         completion: @escaping (Bool, URL?) -> Void
     ) {
-        let html = MarkdownRenderer.shared.renderToCompleteHTML(markdown)
+        let html = preparedExportHTML(markdown: markdown, sourceDocumentURL: sourceDocumentURL)
 
         do {
             try html.write(to: url, atomically: true, encoding: .utf8)
@@ -114,6 +126,7 @@ struct DocumentExporter {
     /// 导出为 PDF
     private static func exportToPDF(
         markdown: String,
+        sourceDocumentURL: URL?,
         to url: URL,
         completion: @escaping (Bool, URL?) -> Void
     ) {
@@ -121,8 +134,8 @@ struct DocumentExporter {
         let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1200))
         webView.isHidden = true
 
-        let html = MarkdownRenderer.shared.renderToCompleteHTML(markdown)
-        webView.loadHTMLString(html, baseURL: nil)
+        let html = preparedExportHTML(markdown: markdown, sourceDocumentURL: sourceDocumentURL)
+        webView.loadHTMLString(html, baseURL: sourceDocumentURL?.deletingLastPathComponent())
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             let configuration = WKPDFConfiguration()
@@ -143,6 +156,37 @@ struct DocumentExporter {
             }
         }
     }
+
+    static func preparedExportHTML(markdown: String, sourceDocumentURL: URL?) -> String {
+        let baseHTML = MarkdownRenderer.shared.renderToCompleteHTML(markdown)
+        return rewritingImageSources(in: baseHTML, sourceDocumentURL: sourceDocumentURL)
+    }
+
+    private static func rewritingImageSources(in html: String, sourceDocumentURL: URL?) -> String {
+        guard let regex = try? NSRegularExpression(pattern: #"<img\s+src="([^"]+)" alt="([^"]*)">"#) else {
+            return html
+        }
+
+        let nsHTML = html as NSString
+        let range = NSRange(location: 0, length: nsHTML.length)
+        let matches = regex.matches(in: html, range: range)
+        guard !matches.isEmpty else { return html }
+
+        var result = html
+        for match in matches.reversed() {
+            let source = nsHTML.substring(with: match.range(at: 1))
+            guard let resolvedURL = MarkdownAssetPathing.resolvedAssetURL(for: source, relativeTo: sourceDocumentURL) else {
+                continue
+            }
+
+            let escapedSource = resolvedURL.isFileURL ? resolvedURL.absoluteString : resolvedURL.absoluteString
+            if let sourceRange = Range(match.range(at: 1), in: result) {
+                result.replaceSubrange(sourceRange, with: escapedSource)
+            }
+        }
+
+        return result
+    }
 }
 
 // MARK: - Export Sheet View
@@ -150,6 +194,7 @@ struct DocumentExporter {
 /// 导出选项视图
 struct ExportSheetView: View {
     let markdown: String
+    let sourceDocumentURL: URL?
     let onComplete: (Bool, URL?) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -240,6 +285,7 @@ struct ExportSheetView: View {
 /// 导出按钮包装器
 struct ExportButton: View {
     let markdown: String
+    let sourceDocumentURL: URL?
     let suggestedURL: URL?
     var onExportComplete: ((Bool, URL?) -> Void)?
 
@@ -261,6 +307,7 @@ struct ExportButton: View {
         DocumentExporter.export(
             markdown: markdown,
             format: format,
+            sourceDocumentURL: sourceDocumentURL,
             suggestedURL: suggestedURL
         ) { success, url in
             onExportComplete?(success, url)

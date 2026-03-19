@@ -62,64 +62,9 @@ final class MarkdownRenderer {
     /// - Parameter markdown: Markdown 源文本
     /// - Returns: HTML 字符串
     func renderToHTML(_ markdown: String) -> String {
-        var html = markdown
-
-        // 转义 HTML 特殊字符
-        html = escapeHTML(html)
-
-        // 渲染标题
-        html = renderHeadingsHTML(html)
-
-        // 渲染粗体
-        html = html.replacingOccurrences(
-            of: #"\*\*([^*]+)\*\*"#,
-            with: "<strong>$1</strong>",
-            options: .regularExpression
-        )
-        html = html.replacingOccurrences(
-            of: #"__([^_]+)__"#,
-            with: "<strong>$1</strong>",
-            options: .regularExpression
-        )
-
-        // 渲染斜体
-        html = html.replacingOccurrences(
-            of: #"\*([^*]+)\*"#,
-            with: "<em>$1</em>",
-            options: .regularExpression
-        )
-        html = html.replacingOccurrences(
-            of: #" _([^_]+)_"#,
-            with: "<em>$1</em>",
-            options: .regularExpression
-        )
-
-        // 渲染行内代码
-        html = html.replacingOccurrences(
-            of: #"`([^`]+)`"#,
-            with: "<code>$1</code>",
-            options: .regularExpression
-        )
-
-        // 渲染链接
-        html = html.replacingOccurrences(
-            of: #"\[([^\]]+)\]\(([^)]+)\)"#,
-            with: "<a href=\"$2\">$1</a>",
-            options: .regularExpression
-        )
-
-        // 渲染图片
-        html = html.replacingOccurrences(
-            of: #"!\[([^\]]+)\]\(([^)]+)\)"#,
-            with: "<img src=\"$2\" alt=\"$1\">",
-            options: .regularExpression
-        )
-
-        // 渲染换行
-        html = html.replacingOccurrences(of: "\n\n", with: "<p>")
-        html = html.replacingOccurrences(of: "\n", with: "<br>")
-
-        return html
+        MarkdownRenderModelBuilder.build(from: markdown)
+            .map(renderHTMLNode)
+            .joined(separator: "\n")
     }
 
     /// 将 Markdown 渍染为完整的 HTML 文档
@@ -230,22 +175,115 @@ final class MarkdownRenderer {
         }
     }
 
-    /// 在 HTML 中渲染标题
-    private func renderHeadingsHTML(_ html: String) -> String {
-        var result = html
-
-        // 处理各级标题
-        for level in 1...6 {
-            let pattern = "(?m)^(#{\(level)})\\s+(.+)$"
-            let replacement = "<h\(level)>$2</h\(level)>"
-            result = result.replacingOccurrences(
-                of: pattern,
-                with: replacement,
-                options: .regularExpression
-            )
+    private func renderHTMLNode(_ node: MarkdownRenderNode) -> String {
+        switch node {
+        case .heading(let level, let text):
+            return renderHeadingHTML(level: level, text: text)
+        case .paragraph(let text):
+            return "<p>\(renderInlineHTML(text))</p>"
+        case .unorderedList(let items):
+            return renderListHTML(items: items, ordered: false)
+        case .orderedList(let items, let startIndex):
+            return renderListHTML(items: items, ordered: true, startIndex: startIndex)
+        case .taskList(let items):
+            return renderTaskListHTML(items: items)
+        case .quote(let text):
+            return renderQuoteHTML(text)
+        case .codeBlock(let language, let code):
+            return renderCodeFenceHTML(language: language, code: code)
+        case .table(let headers, let rows):
+            return renderTableHTML(headers: headers, rows: rows)
+        case .image(let alt, let source):
+            return renderImageHTML(alt: alt, source: source)
+        case .thematicBreak:
+            return "<hr>"
         }
+    }
 
-        return result
+    private func renderHeadingHTML(level: Int, text: String) -> String {
+        "<h\(level)>\(renderInlineHTML(text))</h\(level)>"
+    }
+
+    private func renderListHTML(items: [String], ordered: Bool, startIndex: Int = 1) -> String {
+        let tag = ordered ? "ol" : "ul"
+        let startAttribute = ordered && startIndex > 1 ? " start=\"\(startIndex)\"" : ""
+        let content = items.map { "<li>\(renderInlineHTML($0))</li>" }.joined()
+        return "<\(tag)\(startAttribute)>\(content)</\(tag)>"
+    }
+
+    private func renderTaskListHTML(items: [MarkdownTaskItemModel]) -> String {
+        let content = items.map { item in
+            let checkbox = "<input type=\"checkbox\" disabled\(item.isCompleted ? " checked" : "")>"
+            return "<li>\(checkbox) \(renderInlineHTML(item.text))</li>"
+        }.joined()
+
+        return "<ul>\(content)</ul>"
+    }
+
+    private func renderQuoteHTML(_ text: String) -> String {
+        "<blockquote><p>\(renderInlineHTML(text))</p></blockquote>"
+    }
+
+    private func renderCodeFenceHTML(language: String, code: String) -> String {
+        let classAttribute = language.isEmpty ? "" : " class=\"language-\(escapeHTML(language))\""
+        return "<pre><code\(classAttribute)>\(escapeHTML(code))</code></pre>"
+    }
+
+    private func renderTableHTML(headers: [MarkdownTableColumn], rows: [MarkdownTableRowModel]) -> String {
+        let headerCells = headers.map { column in
+            "<th\(alignmentHTMLAttribute(for: column.alignment))>\(renderInlineHTML(column.text))</th>"
+        }.joined()
+
+        let bodyRows = rows.map { row in
+            let cells = row.columns.map { column in
+                "<td\(alignmentHTMLAttribute(for: column.alignment))>\(renderInlineHTML(column.text))</td>"
+            }.joined()
+            return "<tr>\(cells)</tr>"
+        }.joined()
+
+        return "<table><thead><tr>\(headerCells)</tr></thead><tbody>\(bodyRows)</tbody></table>"
+    }
+
+    private func renderImageHTML(alt: String, source: String) -> String {
+        let alt = escapeHTML(alt)
+        let source = escapeHTML(source)
+        return "<p><img src=\"\(source)\" alt=\"\(alt)\"></p>"
+    }
+
+    private func renderInlineHTML(_ markdown: String) -> String {
+        let html = MarkdownInlineParser.parse(markdown)
+            .map { node in
+                switch node {
+                case .text(let text):
+                    return escapeHTML(text).replacingOccurrences(of: "\n", with: "<br>")
+                case .link(let title, let destination, _):
+                    return "<a href=\"\(escapeHTML(destination))\">\(escapeHTML(title))</a>"
+                case .image(let alt, let source, _):
+                    return "<img src=\"\(escapeHTML(source))\" alt=\"\(escapeHTML(alt))\">"
+                case .inlineCode(let text):
+                    return "<code>\(escapeHTML(text))</code>"
+                case .strong(let text):
+                    return "<strong>\(escapeHTML(text))</strong>"
+                case .emphasis(let text):
+                    return "<em>\(escapeHTML(text))</em>"
+                }
+            }
+            .joined()
+
+        return html
+    }
+
+    private func alignmentHTMLAttribute(for alignment: TableAlignment?) -> String {
+        switch alignment {
+        case .left:
+            return " style=\"text-align:left\""
+        case .center:
+            return " style=\"text-align:center\""
+        case .right:
+            return " style=\"text-align:right\""
+        case nil:
+            return ""
+        }
     }
 
     /// 在 AttributedString 中渲染粗体

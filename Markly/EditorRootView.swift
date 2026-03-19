@@ -58,6 +58,26 @@ private struct ImageEditingContext {
     let lineNumber: Int
 }
 
+private struct QuickLinkEditingContext: Identifiable, Equatable {
+    let blockLineStart: Int
+    let originalMarkdown: String
+
+    var id: String { "\(blockLineStart)::\(originalMarkdown)" }
+}
+
+private struct QuickImageEditingContext: Identifiable, Equatable {
+    let lineNumber: Int
+
+    var id: Int { lineNumber }
+}
+
+private struct CodeFenceLanguageEditingContext: Identifiable {
+    let blockLineStart: Int
+    let currentLanguage: String
+
+    var id: Int { blockLineStart }
+}
+
 private struct SearchMatch: Identifiable {
     let range: Range<String.Index>
     let index: Int
@@ -66,6 +86,8 @@ private struct SearchMatch: Identifiable {
 }
 
 private struct PreviewBlockSnapshot {
+    let renderNode: MarkdownRenderNode
+    let inlineNodes: [MarkdownInlineNode]?
     let attributedText: AttributedString
     let links: [PreviewLinkItem]
     let image: PreviewImageItem?
@@ -87,20 +109,23 @@ private struct EditorDocumentPreviewSnapshot {
         imageURLResolver: (String) -> URL?
     ) -> EditorDocumentPreviewSnapshot {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let blocksByID = Dictionary(uniqueKeysWithValues: blocks.map { block in
-            (
+        let blocksByID: [String: PreviewBlockSnapshot] = Dictionary(uniqueKeysWithValues: blocks.map { block -> (String, PreviewBlockSnapshot) in
+            let renderNode = MarkdownRenderModelBuilder.node(for: block)
+            return (
                 block.id,
                 PreviewBlockSnapshot(
+                    renderNode: renderNode,
+                    inlineNodes: PreviewParsing.inlineNodes(from: renderNode),
                     attributedText: PreviewParsing.highlightedMarkdownAttributedString(
                         for: block,
                         query: normalizedQuery,
                         currentSearchLine: currentSearchLine
                     ),
                     links: PreviewParsing.links(in: block.text),
-                    image: PreviewParsing.imageItem(in: block, imageURLResolver: imageURLResolver),
-                    taskItems: PreviewParsing.taskItems(in: block),
-                    table: block.kind == .table ? MarkdownTable.parse(from: block.text) : nil,
-                    codeFenceLanguage: PreviewParsing.codeFenceLanguage(in: block.text)
+                    image: PreviewParsing.imageItem(from: renderNode, imageURLResolver: imageURLResolver),
+                    taskItems: PreviewParsing.taskItems(in: block, from: renderNode),
+                    table: PreviewParsing.table(from: renderNode),
+                    codeFenceLanguage: PreviewParsing.codeFenceLanguage(from: renderNode)
                 )
             )
         })
@@ -115,7 +140,6 @@ private struct EditorDocumentPreviewSnapshot {
 }
 
 private enum PreviewParsing {
-    static let linkRegex = try! NSRegularExpression(pattern: #"\[([^\]]+)\]\(([^)]+)\)"#)
     static let imageRegex = try! NSRegularExpression(pattern: #"^!\[([^\]]*)\]\(([^)]+)\)$"#)
 
     static func markdownAttributedString(for markdown: String) -> AttributedString {
@@ -129,6 +153,15 @@ private enum PreviewParsing {
             )
         } catch {
             return AttributedString(markdown)
+        }
+    }
+
+    nonisolated static func inlineNodes(from renderNode: MarkdownRenderNode) -> [MarkdownInlineNode]? {
+        switch DocumentPreviewSupport.content(for: renderNode) {
+        case .heading(let nodes), .paragraph(let nodes):
+            return nodes
+        default:
+            return nil
         }
     }
 
@@ -164,69 +197,76 @@ private enum PreviewParsing {
         return AttributedString(mutable)
     }
 
-    static func codeFenceLanguage(in text: String) -> String {
-        let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
-        let language = firstLine.trimmingCharacters(in: .whitespaces).dropFirst(3).trimmingCharacters(in: .whitespaces)
+    nonisolated static func codeFenceLanguage(in text: String) -> String {
+        let language = rawCodeFenceLanguage(in: text)
         return language.isEmpty ? "代码块" : language.uppercased()
     }
 
-    static func links(in text: String) -> [PreviewLinkItem] {
-        let nsText = text as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        return linkRegex.matches(in: text, range: range).compactMap { match in
-            let title = nsText.substring(with: match.range(at: 1))
-            let rawURL = nsText.substring(with: match.range(at: 2))
-            guard let destination = URL(string: rawURL) else { return nil }
+    nonisolated static func codeFenceLanguage(from renderNode: MarkdownRenderNode) -> String {
+        let language = rawCodeFenceLanguage(from: renderNode)
+        return language.isEmpty ? "代码块" : language.uppercased()
+    }
+
+    nonisolated static func rawCodeFenceLanguage(in text: String) -> String {
+        let firstLine = text.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+            return String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+        }
+        return ""
+    }
+
+    nonisolated static func rawCodeFenceLanguage(from renderNode: MarkdownRenderNode) -> String {
+        guard case .codeBlock(let language, _) = renderNode else { return "" }
+        return language
+    }
+
+    nonisolated static func codeFenceBody(from renderNode: MarkdownRenderNode, fallback text: String) -> String {
+        guard case .codeBlock(_, let code) = renderNode else { return text }
+        return code
+    }
+
+    nonisolated static func links(in text: String) -> [PreviewLinkItem] {
+        MarkdownInlineParser.parse(text).compactMap { node in
+            guard case let .link(title, rawURL, markdown) = node,
+                  let destination = URL(string: rawURL) else {
+                return nil
+            }
+
             return PreviewLinkItem(
                 title: title,
                 destination: destination,
-                markdown: nsText.substring(with: match.range)
+                markdown: markdown
             )
         }
     }
 
-    static func imageItem(in block: MarkdownBlock, imageURLResolver: (String) -> URL?) -> PreviewImageItem? {
-        let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nsText = trimmed as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        guard let match = imageRegex.firstMatch(in: trimmed, range: range) else { return nil }
-
-        let source = nsText.substring(with: match.range(at: 2))
+    nonisolated static func imageItem(from renderNode: MarkdownRenderNode, imageURLResolver: (String) -> URL?) -> PreviewImageItem? {
+        guard case .image(let alt, let source) = renderNode else { return nil }
         return PreviewImageItem(
-            alt: nsText.substring(with: match.range(at: 1)),
+            alt: alt,
             source: source,
             url: imageURLResolver(source)
         )
     }
 
-    static func taskItems(in block: MarkdownBlock) -> [PreviewTaskItem] {
-        block.text
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .enumerated()
-            .compactMap { index, line in
-                guard let parts = taskMatch(in: String(line)) else { return nil }
-                return PreviewTaskItem(
-                    lineNumber: block.lineStart + index,
-                    text: parts.text,
-                    isCompleted: parts.isCompleted
-                )
-            }
+    nonisolated static func taskItems(in block: MarkdownBlock, from renderNode: MarkdownRenderNode) -> [PreviewTaskItem] {
+        guard case .taskList(let items) = renderNode else { return [] }
+        return items.enumerated().map { index, item in
+            PreviewTaskItem(
+                lineNumber: block.lineStart + index,
+                text: item.text,
+                isCompleted: item.isCompleted
+            )
+        }
     }
 
-    private static func taskMatch(in line: String) -> (prefix: String, isCompleted: Bool, suffix: String, text: String)? {
-        guard let regex = try? NSRegularExpression(pattern: #"^(\s*[-*+]\s+\[)([ xX])(\]\s+)(.*)$"#) else {
-            return nil
-        }
-
-        let nsLine = line as NSString
-        let fullRange = NSRange(location: 0, length: nsLine.length)
-        guard let match = regex.firstMatch(in: line, range: fullRange) else { return nil }
-
-        return (
-            prefix: nsLine.substring(with: match.range(at: 1)),
-            isCompleted: nsLine.substring(with: match.range(at: 2)).lowercased() == "x",
-            suffix: nsLine.substring(with: match.range(at: 3)),
-            text: nsLine.substring(with: match.range(at: 4))
+    nonisolated static func table(from renderNode: MarkdownRenderNode) -> MarkdownTable? {
+        guard case .table(let headers, let rows) = renderNode else { return nil }
+        return MarkdownTable(
+            headers: headers.map(\.text),
+            rows: rows.map { $0.columns.map(\.text) },
+            alignments: headers.map(\.alignment)
         )
     }
 }
@@ -341,6 +381,10 @@ struct EditorRootView: View {
     @State private var imageSourceDraft = ""
     @State private var linkEditingContext: LinkEditingContext?
     @State private var imageEditingContext: ImageEditingContext?
+    @State private var quickLinkEditingContext: QuickLinkEditingContext?
+    @State private var quickImageEditingContext: QuickImageEditingContext?
+    @State private var codeFenceLanguageEditingContext: CodeFenceLanguageEditingContext?
+    @State private var codeFenceLanguageDraft = ""
     @State private var showExportSheet = false
     @State private var exportSucceeded = false
     @State private var showSearchSheet = false
@@ -368,10 +412,15 @@ struct EditorRootView: View {
     @State private var isSavingDocument = false
     @State private var pendingUntitledDraftRecovery: String?
     @State private var lastUntitledDraftSaveTime: Date?
+    @State private var didApplyUITestConfiguration = false
     @FocusState private var blockEditorFocused: Bool
 
     private let preferences = EditorPreferences.shared
     private let analysisRefreshDelayNanoseconds: UInt64 = 80_000_000
+
+    private var uiTestConfiguration: UITestLaunchConfiguration? {
+        UITestLaunchConfiguration.current
+    }
 
     private var untitledDraftStorageValue: String? {
         UserDefaults.standard.string(forKey: Self.untitledDraftKey)
@@ -420,14 +469,11 @@ struct EditorRootView: View {
     }
 
     private var visiblePreviewBlocks: [MarkdownBlock] {
-        blocks.filter { block in
-            !headingSections.contains { section in
-                foldedHeadingLines.contains(section.heading.lineNumber) &&
-                section.hasContent &&
-                block.lineStart > section.heading.lineNumber &&
-                block.lineStart <= section.contentLineEnd
-            }
-        }
+        DocumentOutlineBehavior.visibleBlocks(
+            from: blocks,
+            headingSections: headingSections,
+            foldedHeadingLines: foldedHeadingLines
+        )
     }
 
     private var currentBlock: MarkdownBlock? {
@@ -471,13 +517,10 @@ struct EditorRootView: View {
     }
 
     private var softFoldedEditorRanges: [ClosedRange<Int>] {
-        headingSections.compactMap { section in
-            guard foldedHeadingLines.contains(section.heading.lineNumber), section.hasContent else {
-                return nil
-            }
-
-            return section.contentLineStart...section.contentLineEnd
-        }
+        DocumentOutlineBehavior.foldedEditorRanges(
+            headingSections: headingSections,
+            foldedHeadingLines: foldedHeadingLines
+        )
     }
 
     private var searchMatches: [SearchMatch] {
@@ -564,6 +607,9 @@ struct EditorRootView: View {
         .sheet(item: $tableEditingContext) { context in
             tableEditorSheet(context)
         }
+        .sheet(item: $codeFenceLanguageEditingContext) { _ in
+            codeFenceLanguageSheet
+        }
         .sheet(isPresented: $showExportSheet) {
             exportSheet
         }
@@ -581,11 +627,13 @@ struct EditorRootView: View {
             Text("文档已成功导出")
         }
         .onAppear {
+            applyUITestConfigurationIfNeeded()
             scheduleAnalysisSnapshotRefresh(for: document.text, mode: .immediate)
             refreshSearchSnapshot(for: document.text, query: searchText)
             refreshPreviewSnapshot()
             viewMode = preferences.viewMode
             editMode = preferences.editMode
+            applyUITestConfigurationIfNeeded()
             lastSavedText = document.text
             initialDocumentText = document.text
             configureAutoSaveIfNeeded()
@@ -707,6 +755,7 @@ struct EditorRootView: View {
         }
         .listStyle(.sidebar)
         .navigationTitle("Markly")
+        .accessibilityIdentifier("editor.sidebar")
     }
 
     private var editorPane: some View {
@@ -723,6 +772,7 @@ struct EditorRootView: View {
     private var sourceEditor: some View {
         VStack(alignment: .leading, spacing: 0) {
             paneTitle("源码")
+                .accessibilityIdentifier("editor.sourcePaneTitle")
 
             if let pendingUntitledDraftRecovery, fileURL == nil {
                 untitledDraftRecoveryBanner(draft: pendingUntitledDraftRecovery)
@@ -739,6 +789,7 @@ struct EditorRootView: View {
                 selectionState: $selectionState,
                 requestedLine: $requestedLine,
                 revealedLine: $revealedLine,
+                documentFileURL: fileURL,
                 highlightedLineRange: highlightedEditorLineRange,
                 softFoldedLineRanges: softFoldedEditorRanges,
                 editMode: editMode,
@@ -761,6 +812,7 @@ struct EditorRootView: View {
     private var documentEditor: some View {
         VStack(alignment: .leading, spacing: 0) {
             paneTitle("文档")
+                .accessibilityIdentifier("editor.documentPaneTitle")
 
             if let pendingUntitledDraftRecovery, fileURL == nil {
                 untitledDraftRecoveryBanner(draft: pendingUntitledDraftRecovery)
@@ -788,6 +840,7 @@ struct EditorRootView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .background(Color(nsColor: .controlBackgroundColor))
+                .accessibilityIdentifier("editor.documentScrollView")
                 .onChange(of: revealedLine) { _, newValue in
                     guard
                         let newValue,
@@ -848,6 +901,7 @@ struct EditorRootView: View {
         .padding(18)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityIdentifier("editor.documentSummary")
     }
 
     @ViewBuilder
@@ -869,16 +923,19 @@ struct EditorRootView: View {
                 Button("取消") {
                     cancelBlockEditing()
                 }
+                .accessibilityIdentifier("editor.block.\(block.lineStart).cancelButton")
                 Button("应用") {
                     commitBlockEditing(block)
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("editor.block.\(block.lineStart).applyButton")
             }
 
             BlockTextEditor(
                 text: $editingBlockText,
                 selectedRange: $blockEditorSelection,
-                fontSize: CGFloat(preferences.fontSize)
+                fontSize: CGFloat(preferences.fontSize),
+                accessibilityID: "editor.block.\(block.lineStart).textView"
             ) { action in
                 handleBlockEditorAction(action, for: block)
             }
@@ -903,6 +960,7 @@ struct EditorRootView: View {
         }
         .padding(16)
         .background(blockCardBackground(for: block, tint: .accentColor))
+        .accessibilityIdentifier("editor.block.\(block.lineStart).editorCard")
         .onAppear {
             blockEditorFocused = true
         }
@@ -916,6 +974,10 @@ struct EditorRootView: View {
                 .padding(.vertical, 8)
         case .heading:
             previewHeadingView(block)
+        case .unorderedList, .orderedList:
+            previewListView(block)
+        case .quote:
+            previewQuoteView(block)
         case .taskList:
             previewTaskListView(block)
         case .codeFence:
@@ -933,6 +995,10 @@ struct EditorRootView: View {
         }
     }
 
+    private var semanticInlinePreviewEnabled: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func previewTextBlockView(_ block: MarkdownBlock) -> some View {
         let snapshot = previewBlocksByID[block.id]
         let links = snapshot?.links ?? []
@@ -940,42 +1006,25 @@ struct EditorRootView: View {
         return VStack(alignment: .leading, spacing: 10) {
             blockHeader(for: block, allowInlineEdit: true)
 
-            Text(snapshot?.attributedText ?? PreviewParsing.markdownAttributedString(for: block.text))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .opacity(isBlockCurrent(block) ? 1 : 0.96)
+            if semanticInlinePreviewEnabled, let inlineNodes = snapshot?.inlineNodes {
+                previewInlineText(inlineNodes)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isBlockCurrent(block) ? 1 : 0.96)
+            } else {
+                Text(snapshot?.attributedText ?? PreviewParsing.markdownAttributedString(for: block.text))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(isBlockCurrent(block) ? 1 : 0.96)
+            }
 
             if !links.isEmpty {
-                HStack(spacing: 8) {
-                    ForEach(links.prefix(3)) { link in
-                        Button {
-                            openURL(link.destination)
-                        } label: {
-                            Label(link.title, systemImage: "link")
-                        }
-                        .buttonStyle(.borderless)
-                        .help(link.destination.absoluteString)
-                        .contextMenu {
-                            Button("打开链接") {
-                                openURL(link.destination)
-                            }
-                            Button("编辑链接") {
-                                beginEditingLink(link, in: block)
-                            }
-                            Button("删除链接") {
-                                deleteLink(link, in: block)
-                            }
-                            Button("复制链接") {
-                                copyToPasteboard(link.destination.absoluteString)
-                            }
-                        }
-                    }
-                }
-                .font(.caption)
+                previewLinkChips(links, in: block)
             }
         }
         .padding(14)
         .background(blockCardBackground(for: block, tint: .blue))
+        .accessibilityIdentifier("editor.block.\(block.lineStart).card")
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .contextMenu {
             blockContextMenu(for: block)
@@ -988,6 +1037,8 @@ struct EditorRootView: View {
     private func previewHeadingView(_ block: MarkdownBlock) -> some View {
         let heading = headings.first(where: { $0.lineNumber == block.lineStart })
         let isFolded = foldedHeadingLines.contains(block.lineStart)
+        let inlineNodes = previewBlocksByID[block.id]?.inlineNodes
+        let headingLineNumber = block.lineStart
 
         return VStack(alignment: .leading, spacing: 10) {
             blockHeader(for: block, allowInlineEdit: true)
@@ -997,10 +1048,17 @@ struct EditorRootView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
 
-                Text(heading?.title ?? block.text.trimmingCharacters(in: .whitespaces))
-                    .font(previewHeadingFont(for: heading?.level ?? 1))
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if semanticInlinePreviewEnabled, let inlineNodes {
+                    previewInlineText(inlineNodes, font: previewHeadingFont(for: heading?.level ?? 1), isBold: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("editor.heading.\(headingLineNumber).title")
+                } else {
+                    Text(heading?.title ?? block.text.trimmingCharacters(in: .whitespaces))
+                        .font(previewHeadingFont(for: heading?.level ?? 1))
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("editor.heading.\(headingLineNumber).title")
+                }
 
                 if headingSectionsByLine[block.lineStart]?.hasContent == true {
                     Button {
@@ -1010,6 +1068,7 @@ struct EditorRootView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("editor.heading.\(headingLineNumber).foldButton")
                 }
             }
 
@@ -1028,6 +1087,7 @@ struct EditorRootView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(blockCardBackground(for: block, tint: .red))
+        .accessibilityIdentifier("editor.heading.\(headingLineNumber).card")
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .contextMenu {
             blockContextMenu(for: block)
@@ -1037,13 +1097,119 @@ struct EditorRootView: View {
         }
     }
 
+    private func previewListView(_ block: MarkdownBlock) -> some View {
+        let snapshot = previewBlocksByID[block.id]
+        let links = snapshot?.links ?? []
+
+        guard semanticInlinePreviewEnabled, let renderNode = snapshot?.renderNode else {
+            return AnyView(previewTextBlockView(block))
+        }
+
+        let rows: [DocumentPreviewRow]
+        switch DocumentPreviewSupport.content(for: renderNode) {
+        case .list(let previewRows):
+            rows = previewRows
+        default:
+            return AnyView(previewTextBlockView(block))
+        }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                blockHeader(for: block, allowInlineEdit: true)
+
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(row.marker ?? "•")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, alignment: .trailing)
+
+                        previewInlineText(row.inlineNodes)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                if !links.isEmpty {
+                    previewLinkChips(links, in: block)
+                }
+            }
+            .padding(14)
+            .background(blockCardBackground(for: block, tint: .blue))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contextMenu {
+                blockContextMenu(for: block)
+            }
+            .onTapGesture(count: 2) {
+                beginEditingBlock(block)
+            }
+        )
+    }
+
+    private func previewQuoteView(_ block: MarkdownBlock) -> some View {
+        let snapshot = previewBlocksByID[block.id]
+        let links = snapshot?.links ?? []
+
+        guard semanticInlinePreviewEnabled,
+              let renderNode = snapshot?.renderNode else {
+            return AnyView(previewTextBlockView(block))
+        }
+
+        let rows: [DocumentPreviewRow]
+        switch DocumentPreviewSupport.content(for: renderNode) {
+        case .quote(let previewRows):
+            rows = previewRows
+        default:
+            return AnyView(previewTextBlockView(block))
+        }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 10) {
+                blockHeader(for: block, allowInlineEdit: true)
+
+                HStack(alignment: .top, spacing: 12) {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.secondary.opacity(0.35))
+                        .frame(width: 4)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            previewInlineText(row.inlineNodes)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+
+                if !links.isEmpty {
+                    previewLinkChips(links, in: block)
+                }
+            }
+            .padding(14)
+            .background(blockCardBackground(for: block, tint: .mint))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contextMenu {
+                blockContextMenu(for: block)
+            }
+            .onTapGesture(count: 2) {
+                beginEditingBlock(block)
+            }
+        )
+    }
+
     private func previewTaskListView(_ block: MarkdownBlock) -> some View {
         let items = previewBlocksByID[block.id]?.taskItems ?? []
+        let links = previewBlocksByID[block.id]?.links ?? []
+        let renderNode = previewBlocksByID[block.id]?.renderNode
+        let previewRows: [DocumentPreviewRow]
+        if let renderNode,
+           case .taskList(let rows) = DocumentPreviewSupport.content(for: renderNode) {
+            previewRows = rows
+        } else {
+            previewRows = items.map { _ in DocumentPreviewRow(marker: nil, inlineNodes: []) }
+        }
 
         return VStack(alignment: .leading, spacing: 10) {
             blockHeader(for: block, allowInlineEdit: true)
 
-            ForEach(items) { item in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 Button {
                     executeDocumentCommand(.toggleTaskItem(lineNumber: item.lineNumber))
                 } label: {
@@ -1052,14 +1218,30 @@ struct EditorRootView: View {
                             .foregroundStyle(item.isCompleted ? Color.accentColor : .secondary)
                             .padding(.top, 2)
 
-                        Text(item.text.isEmpty ? " " : item.text)
+                        if semanticInlinePreviewEnabled {
+                            previewInlineText(
+                                previewRows.indices.contains(index)
+                                    ? previewRows[index].inlineNodes
+                                    : MarkdownInlineParser.parse(item.text.isEmpty ? " " : item.text),
+                                foregroundColor: item.isCompleted ? .secondaryLabelColor : .labelColor,
+                                strikethrough: item.isCompleted
+                            )
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .strikethrough(item.isCompleted, color: .secondary)
-                            .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                        } else {
+                            Text(item.text.isEmpty ? " " : item.text)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .strikethrough(item.isCompleted, color: .secondary)
+                                .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                        }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("editor.task.\(item.lineNumber).toggle")
+            }
+
+            if !links.isEmpty {
+                previewLinkChips(links, in: block)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1075,7 +1257,9 @@ struct EditorRootView: View {
     }
 
     private func previewCodeFenceView(_ block: MarkdownBlock) -> some View {
+        let renderNode = previewBlocksByID[block.id]?.renderNode
         let language = previewBlocksByID[block.id]?.codeFenceLanguage ?? PreviewParsing.codeFenceLanguage(in: block.text)
+        let codeBody = renderNode.map { PreviewParsing.codeFenceBody(from: $0, fallback: block.text) } ?? block.text
 
         return VStack(alignment: .leading, spacing: 12) {
             blockHeader(for: block, allowInlineEdit: true)
@@ -1085,6 +1269,13 @@ struct EditorRootView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+                Button("语言") {
+                    beginEditingCodeFenceLanguage(
+                        block,
+                        currentLanguage: renderNode.map(PreviewParsing.rawCodeFenceLanguage(from:)) ?? PreviewParsing.rawCodeFenceLanguage(in: block.text)
+                    )
+                }
+                .buttonStyle(.borderless)
                 Button("复制") {
                     copyToPasteboard(block.text)
                 }
@@ -1092,7 +1283,7 @@ struct EditorRootView: View {
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(verbatim: block.text)
+                Text(verbatim: codeBody)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1103,6 +1294,13 @@ struct EditorRootView: View {
         .background(blockCardBackground(for: block, tint: .indigo))
         .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .contextMenu {
+            Button("编辑语言") {
+                beginEditingCodeFenceLanguage(
+                    block,
+                    currentLanguage: renderNode.map(PreviewParsing.rawCodeFenceLanguage(from:)) ?? PreviewParsing.rawCodeFenceLanguage(in: block.text)
+                )
+            }
+            Divider()
             Button("复制代码块") {
                 copyToPasteboard(block.text)
             }
@@ -1112,6 +1310,182 @@ struct EditorRootView: View {
         .onTapGesture(count: 2) {
             beginEditingBlock(block)
         }
+    }
+
+    private func previewInlineText(
+        _ nodes: [MarkdownInlineNode],
+        font: Font = .body,
+        isBold: Bool = false,
+        foregroundColor: NSColor? = nil,
+        strikethrough: Bool = false
+    ) -> Text {
+        Text(
+            previewInlineAttributedString(
+                nodes,
+                font: font,
+                isBold: isBold,
+                foregroundColor: foregroundColor,
+                strikethrough: strikethrough
+            )
+        )
+    }
+
+    private func previewInlineAttributedString(
+        _ nodes: [MarkdownInlineNode],
+        font: Font,
+        isBold: Bool,
+        foregroundColor: NSColor?,
+        strikethrough: Bool
+    ) -> AttributedString {
+        nodes.reduce(into: AttributedString()) { partial, node in
+            partial.append(
+                previewInlineAttributedFragment(
+                    node,
+                    font: font,
+                    isBold: isBold,
+                    foregroundColor: foregroundColor,
+                    strikethrough: strikethrough
+                )
+            )
+        }
+    }
+
+    private func previewInlineAttributedFragment(
+        _ node: MarkdownInlineNode,
+        font: Font,
+        isBold: Bool,
+        foregroundColor: NSColor?,
+        strikethrough: Bool
+    ) -> AttributedString {
+        var textValue = ""
+        var result: AttributedString
+
+        switch node {
+        case .text(let text):
+            textValue = text
+        case .image(let alt, _, _):
+            textValue = alt.isEmpty ? "[图片]" : "[图片: \(alt)]"
+        case .link(let title, _, _):
+            textValue = title
+        case .inlineCode(let text):
+            textValue = text
+        case .strong(let text):
+            textValue = text
+        case .emphasis(let text):
+            textValue = text
+        }
+
+        result = AttributedString(textValue)
+
+        switch node {
+        case .inlineCode:
+            result.font = .system(.body, design: .monospaced)
+            result.foregroundColor = .systemPink
+        case .link:
+            result.font = font
+            result.foregroundColor = .systemBlue
+            result.underlineStyle = .single
+        case .image:
+            result.font = font
+            result.foregroundColor = .secondary
+        case .strong:
+            result.font = font.weight(.bold)
+        case .emphasis:
+            result.font = font.italic()
+        case .text:
+            result.font = font
+        }
+
+        if isBold, case .text = node {
+            result.font = font.weight(.bold)
+        } else if isBold, case .emphasis = node {
+            result.font = font.weight(.bold).italic()
+        }
+
+        if let foregroundColor, !matchesSpecialForeground(of: node) {
+            result.foregroundColor = foregroundColor
+        }
+
+        if strikethrough {
+            result.strikethroughStyle = .single
+            result.strikethroughColor = .secondaryLabelColor
+        }
+
+        return result
+    }
+
+    private func matchesSpecialForeground(of node: MarkdownInlineNode) -> Bool {
+        switch node {
+        case .link, .image, .inlineCode:
+            return true
+        case .text, .strong, .emphasis:
+            return false
+        }
+    }
+
+    private func previewLinkChips(_ links: [PreviewLinkItem], in block: MarkdownBlock) -> some View {
+        HStack(spacing: 8) {
+            ForEach(links.prefix(3)) { link in
+                HStack(spacing: 4) {
+                    Button {
+                        openURL(link.destination)
+                    } label: {
+                        Label(link.title, systemImage: "link")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(link.destination.absoluteString)
+
+                    Button {
+                        beginQuickEditingLink(link, in: block)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("快速编辑链接")
+                    .popover(
+                        isPresented: Binding(
+                            get: {
+                                quickLinkEditingContext == QuickLinkEditingContext(
+                                    blockLineStart: block.lineStart,
+                                    originalMarkdown: link.markdown
+                                )
+                            },
+                            set: { isPresented in
+                                if !isPresented,
+                                   quickLinkEditingContext == QuickLinkEditingContext(
+                                    blockLineStart: block.lineStart,
+                                    originalMarkdown: link.markdown
+                                   ) {
+                                    resetLinkEditors()
+                                }
+                            }
+                        ),
+                        arrowEdge: .bottom
+                    ) {
+                        quickLinkEditorPopover
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.secondary.opacity(0.08))
+                .clipShape(Capsule())
+                .contextMenu {
+                    Button("打开链接") {
+                        openURL(link.destination)
+                    }
+                    Button("编辑链接") {
+                        beginQuickEditingLink(link, in: block)
+                    }
+                    Button("删除链接") {
+                        deleteLink(link, in: block)
+                    }
+                    Button("复制链接") {
+                        copyToPasteboard(link.destination.absoluteString)
+                    }
+                }
+            }
+        }
+        .font(.caption)
     }
 
     private func previewTableView(_ block: MarkdownBlock) -> some View {
@@ -1172,6 +1546,24 @@ struct EditorRootView: View {
                     }
                     .buttonStyle(.borderless)
                 }
+                Button("编辑") {
+                    beginQuickEditingImage(image, at: block.lineStart)
+                }
+                .buttonStyle(.borderless)
+                .popover(
+                    isPresented: Binding(
+                        get: { quickImageEditingContext == QuickImageEditingContext(lineNumber: block.lineStart) },
+                        set: { isPresented in
+                            if !isPresented,
+                               quickImageEditingContext == QuickImageEditingContext(lineNumber: block.lineStart) {
+                                resetImageEditors()
+                            }
+                        }
+                    ),
+                    arrowEdge: .bottom
+                ) {
+                    quickImageEditorPopover
+                }
                 Button("复制路径") {
                     copyToPasteboard(image.source)
                 }
@@ -1197,7 +1589,7 @@ struct EditorRootView: View {
             }
 
             Button("编辑图片") {
-                beginEditingImage(image, at: block.lineStart)
+                beginQuickEditingImage(image, at: block.lineStart)
             }
 
             Button("删除图片") {
@@ -1305,7 +1697,7 @@ struct EditorRootView: View {
             } else if block.kind == .image {
                 Button("编辑图片") {
                     if let image = previewBlocksByID[block.id]?.image {
-                        beginEditingImage(image, at: block.lineStart)
+                        beginQuickEditingImage(image, at: block.lineStart)
                     }
                 }
                 .buttonStyle(.borderless)
@@ -1317,11 +1709,13 @@ struct EditorRootView: View {
         HStack {
             Text(title)
                 .font(.headline)
+                .accessibilityIdentifier(title == "文档" ? "editor.documentPaneTitleLabel" : "editor.sourcePaneTitleLabel")
             Spacer()
             if !searchMatches.isEmpty {
                 Text("搜索结果 \(min(currentSearchIndex + 1, searchMatches.count))/\(searchMatches.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("editor.searchStatusLabel")
             }
         }
         .padding(.horizontal, 16)
@@ -1426,6 +1820,52 @@ struct EditorRootView: View {
         )
     }
 
+    private var quickLinkEditorPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("编辑链接")
+                .font(.headline)
+
+            TextField("显示文本", text: $linkTitleDraft)
+            TextField("URL", text: $linkURLDraft)
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    resetLinkEditors()
+                }
+                Button("应用") {
+                    commitLinkChanges()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+
+    private var quickImageEditorPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("编辑图片")
+                .font(.headline)
+
+            TextField("图片描述", text: $imageAltDraft)
+            TextField("图片地址或本地路径", text: $imageSourceDraft)
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    resetImageEditors()
+                }
+                Button("应用") {
+                    commitImageChanges()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 340)
+    }
+
     private var preferencesSheet: some View {
         PreferencesSheetView(
             initialViewMode: preferences.viewMode,
@@ -1453,6 +1893,32 @@ struct EditorRootView: View {
         }
     }
 
+    private var codeFenceLanguageSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("代码块语言")
+                .font(.title3.weight(.semibold))
+
+            TextField("例如 swift、python、json", text: $codeFenceLanguageDraft)
+
+            Text("留空会保留为无语言标记的代码块。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Spacer()
+                Button("取消") {
+                    resetCodeFenceLanguageSheet()
+                }
+                Button("应用") {
+                    commitCodeFenceLanguageChanges()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 420)
+    }
+
     private var searchToolbarButton: some View {
         Button {
             showSearchSheet = true
@@ -1460,6 +1926,7 @@ struct EditorRootView: View {
             Label("查找替换", systemImage: "magnifyingglass")
         }
         .help("查找与替换")
+        .accessibilityIdentifier("editor.searchToolbarButton")
     }
 
     private var preferencesToolbarButton: some View {
@@ -1469,6 +1936,7 @@ struct EditorRootView: View {
             Label("偏好设置", systemImage: "slider.horizontal.3")
         }
         .help("编辑器偏好设置")
+        .accessibilityIdentifier("editor.preferencesToolbarButton")
     }
 
     private var foldToolbarButton: some View {
@@ -1699,11 +2167,36 @@ struct EditorRootView: View {
         activeInsertSheet = .link
     }
 
+    private func beginQuickEditingLink(_ link: PreviewLinkItem, in block: MarkdownBlock) {
+        linkTitleDraft = link.title
+        linkURLDraft = link.destination.absoluteString
+        linkEditingContext = LinkEditingContext(blockLineStart: block.lineStart, originalMarkdown: link.markdown)
+        quickLinkEditingContext = QuickLinkEditingContext(
+            blockLineStart: block.lineStart,
+            originalMarkdown: link.markdown
+        )
+    }
+
     private func beginEditingImage(_ image: PreviewImageItem, at lineNumber: Int) {
         imageAltDraft = image.alt
         imageSourceDraft = image.source
         imageEditingContext = ImageEditingContext(lineNumber: lineNumber)
         activeInsertSheet = .image
+    }
+
+    private func beginQuickEditingImage(_ image: PreviewImageItem, at lineNumber: Int) {
+        imageAltDraft = image.alt
+        imageSourceDraft = image.source
+        imageEditingContext = ImageEditingContext(lineNumber: lineNumber)
+        quickImageEditingContext = QuickImageEditingContext(lineNumber: lineNumber)
+    }
+
+    private func beginEditingCodeFenceLanguage(_ block: MarkdownBlock, currentLanguage: String) {
+        codeFenceLanguageDraft = currentLanguage
+        codeFenceLanguageEditingContext = CodeFenceLanguageEditingContext(
+            blockLineStart: block.lineStart,
+            currentLanguage: currentLanguage
+        )
     }
 
     private func deleteLink(_ link: PreviewLinkItem, in block: MarkdownBlock) {
@@ -1738,7 +2231,8 @@ struct EditorRootView: View {
     }
 
     private func commitImageChanges() {
-        let newMarkdown = "![\(imageAltDraft.nonEmpty ?? "图片描述")](\(imageSourceDraft.nonEmpty ?? "/path/to/image.png"))"
+        let normalizedSource = normalizedImageSourceDraft() ?? "/path/to/image.png"
+        let newMarkdown = "![\(imageAltDraft.nonEmpty ?? "图片描述")](\(normalizedSource))"
 
         if let context = imageEditingContext {
             replaceLine(context.lineNumber, with: newMarkdown)
@@ -1752,18 +2246,65 @@ struct EditorRootView: View {
         resetImageSheet()
     }
 
+    private func normalizedImageSourceDraft() -> String? {
+        guard let source = imageSourceDraft.nonEmpty else { return nil }
+
+        if source.hasPrefix("file://"), let url = URL(string: source) {
+            return MarkdownAssetPathing.markdownPath(for: url, relativeTo: fileURL)
+        }
+
+        if source.hasPrefix("/") {
+            return MarkdownAssetPathing.markdownPath(for: URL(fileURLWithPath: source), relativeTo: fileURL)
+        }
+
+        return source
+    }
+
+    private func commitCodeFenceLanguageChanges() {
+        guard let context = codeFenceLanguageEditingContext,
+              let block = MarkdownAnalysis.block(containingLine: context.blockLineStart, in: document.text)
+        else {
+            resetCodeFenceLanguageSheet()
+            return
+        }
+
+        applyMutation(
+            EditorDocumentController.updateCodeFenceLanguage(
+                in: document.text,
+                block: block,
+                language: codeFenceLanguageDraft
+            )
+        )
+        resetCodeFenceLanguageSheet()
+    }
+
     private func resetLinkSheet() {
         activeInsertSheet = nil
+        resetLinkEditors()
+    }
+
+    private func resetImageSheet() {
+        activeInsertSheet = nil
+        resetImageEditors()
+    }
+
+    private func resetLinkEditors() {
+        quickLinkEditingContext = nil
         linkEditingContext = nil
         linkTitleDraft = ""
         linkURLDraft = "https://"
     }
 
-    private func resetImageSheet() {
-        activeInsertSheet = nil
+    private func resetImageEditors() {
+        quickImageEditingContext = nil
         imageEditingContext = nil
         imageAltDraft = ""
         imageSourceDraft = ""
+    }
+
+    private func resetCodeFenceLanguageSheet() {
+        codeFenceLanguageEditingContext = nil
+        codeFenceLanguageDraft = ""
     }
 
     private func copyToPasteboard(_ string: String) {
@@ -1792,36 +2333,11 @@ struct EditorRootView: View {
     }
 
     private func imageURL(from source: String) -> URL? {
-        if let resolvedURL = resolvedImageURL(from: source) {
-            return resolvedURL
-        }
-
-        if source.hasPrefix("file://") {
-            return URL(string: source)
-        }
-
-        if source.hasPrefix("/") {
-            return URL(fileURLWithPath: source)
-        }
-
-        return URL(string: source)
+        resolvedImageURL(from: source)
     }
 
     private func resolvedImageURL(from source: String) -> URL? {
-        if source.hasPrefix("file://"), let url = URL(string: source) {
-            return url
-        }
-
-        if source.hasPrefix("/") {
-            return URL(fileURLWithPath: source)
-        }
-
-        if let remoteURL = URL(string: source), let scheme = remoteURL.scheme, !scheme.isEmpty {
-            return remoteURL
-        }
-
-        guard let fileURL else { return nil }
-        return fileURL.deletingLastPathComponent().appendingPathComponent(source)
+        MarkdownAssetPathing.resolvedAssetURL(for: source, relativeTo: fileURL)
     }
 
     private func replaceLine(_ lineNumber: Int, with replacement: String) {
@@ -1922,6 +2438,12 @@ struct EditorRootView: View {
     }
 
     private func restoreUntitledDraftIfNeeded() {
+        guard uiTestConfiguration == nil else {
+            pendingUntitledDraftRecovery = nil
+            clearUntitledDraftStorage()
+            return
+        }
+
         guard fileURL == nil else {
             clearUntitledDraftStorage()
             return
@@ -1952,6 +2474,7 @@ struct EditorRootView: View {
     }
 
     private func persistUntitledDraftIfNeeded() {
+        guard uiTestConfiguration == nil else { return }
         guard fileURL == nil else { return }
 
         if shouldPersistUntitledDraft(document.text) {
@@ -1974,6 +2497,21 @@ struct EditorRootView: View {
         UserDefaults.standard.removeObject(forKey: Self.untitledDraftKey)
         UserDefaults.standard.removeObject(forKey: Self.untitledDraftTimestampKey)
         lastUntitledDraftSaveTime = nil
+    }
+
+    private func applyUITestConfigurationIfNeeded() {
+        guard !didApplyUITestConfiguration, let uiTestConfiguration else { return }
+        didApplyUITestConfiguration = true
+
+        if let initialViewMode = uiTestConfiguration.initialViewMode {
+            viewMode = initialViewMode
+        }
+
+        if let initialText = uiTestConfiguration.initialText {
+            document.text = initialText
+            lastSavedText = initialText
+            initialDocumentText = initialText
+        }
     }
 
     private func draftPreviewText(for text: String) -> String {
@@ -2617,6 +3155,7 @@ struct EditorRootView: View {
             Label(viewMode.localizedName, systemImage: viewMode.systemImage)
         }
         .help("视图模式")
+        .accessibilityIdentifier("editor.viewModeToolbarMenu")
     }
 
     private var editModeToolbarMenu: some View {
@@ -2657,10 +3196,11 @@ struct EditorRootView: View {
             Label("导出", systemImage: "square.and.arrow.up")
         }
         .help("导出文档")
+        .accessibilityIdentifier("editor.exportToolbarButton")
     }
 
     private var exportSheet: some View {
-        ExportSheetView(markdown: document.text) { success, _ in
+        ExportSheetView(markdown: document.text, sourceDocumentURL: fileURL) { success, _ in
             if success {
                 exportSucceeded = true
             }
@@ -2692,6 +3232,7 @@ private struct BlockTextEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
     let fontSize: CGFloat
+    let accessibilityID: String
     let onAction: (BlockEditorAction) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -2705,6 +3246,7 @@ private struct BlockTextEditor: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.drawsBackground = false
         scrollView.autohidesScrollers = true
+        scrollView.setAccessibilityIdentifier(accessibilityID + ".scrollView")
 
         let textView = BlockEditingTextView()
         textView.delegate = context.coordinator
@@ -2717,6 +3259,7 @@ private struct BlockTextEditor: NSViewRepresentable {
         textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.string = text
         textView.backgroundColor = .textBackgroundColor
+        textView.setAccessibilityIdentifier(accessibilityID)
 
         scrollView.documentView = textView
         context.coordinator.textView = textView
@@ -2836,9 +3379,12 @@ private struct FindReplaceSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("查找与替换")
                 .font(.title3.weight(.semibold))
+                .accessibilityIdentifier("editor.searchSheetTitle")
 
             TextField("查找内容", text: $searchText)
+                .accessibilityIdentifier("editor.searchField")
             TextField("替换为", text: $replaceText)
+                .accessibilityIdentifier("editor.replaceField")
 
             HStack {
                 Text(matchCount == 0 ? "无匹配项" : "第 \(currentMatchIndex) / \(matchCount) 项")
@@ -2847,19 +3393,24 @@ private struct FindReplaceSheet: View {
                 Spacer()
                 Button("上一个", action: onPrevious)
                     .disabled(matchCount == 0)
+                    .accessibilityIdentifier("editor.searchPreviousButton")
                 Button("下一个", action: onNext)
                     .disabled(matchCount == 0)
+                    .accessibilityIdentifier("editor.searchNextButton")
             }
 
             HStack {
                 Button("替换当前", action: onReplaceCurrent)
                     .disabled(matchCount == 0)
+                    .accessibilityIdentifier("editor.replaceCurrentButton")
                 Button("全部替换", action: onReplaceAll)
                     .disabled(matchCount == 0)
+                    .accessibilityIdentifier("editor.replaceAllButton")
                 Spacer()
                 Button("关闭") {
                     dismiss()
                 }
+                .accessibilityIdentifier("editor.searchCloseButton")
             }
         }
         .padding(20)

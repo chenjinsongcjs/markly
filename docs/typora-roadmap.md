@@ -87,3 +87,27 @@ Build Markly toward a Typora-like macOS Markdown editor with a continuous editin
 5. Upgrade tables, images, and links
 6. Rework rendering and export consistency
 7. Expand automated regression coverage
+
+## Current Gap Plan
+
+### Remaining Gaps Versus Typora
+
+1. Preview and export are still not backed by one fully shared semantic rendering layer.
+2. Complex blocks such as tables, links, and images still rely too much on modal or sheet-based editing compared with Typora's low-interruption flow.
+3. Automated coverage is strong at the unit level but still lacks UI-path regression coverage.
+4. Autosave, recovery, and long-document polish exist, but still need stronger validation and refinement.
+
+### Next Execution Order
+
+1. Introduce a shared semantic render model and route export through it first.
+2. Reuse that semantic model in document-mode preview to reduce preview/export drift.
+3. Reduce interruption in table, link, and image editing flows.
+4. Add UI automation for the highest-frequency Typora-style paths.
+5. Finish polish for autosave, recovery, and long-document responsiveness.
+
+### Started On 2026-03-19
+
+- Added Phase 5 implementation kickoff: a shared `MarkdownRenderModel` now exists as the semantic layer used by HTML rendering/export, with dedicated regression coverage.
+- Wired document-mode preview snapshots to reuse `MarkdownRenderModel` for task lists, tables, images, and code fence metadata, so preview and export now begin from the same semantic block interpretation.
+- Added the first `MarklyUITests` smoke target, launch-configuration hooks, and accessibility identifiers for pane titles and toolbar actions, so Phase 7 now has a real UI-path automation starting point.
+- Reduced interruption for existing link and image edits in document mode by replacing the old sheet-first path with lightweight popover editors, while keeping sheet-based insertion for new content.

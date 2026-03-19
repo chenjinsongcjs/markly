@@ -20,6 +20,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
     @Binding var selectionState: EditorSelectionState
     @Binding var requestedLine: Int?
     @Binding var revealedLine: Int?
+    var documentFileURL: URL?
     var highlightedLineRange: ClosedRange<Int>?
     var softFoldedLineRanges: [ClosedRange<Int>] = []
     var editMode: EditorEditMode = .normal
@@ -31,6 +32,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             selectionState: $selectionState,
             requestedLine: $requestedLine,
             revealedLine: $revealedLine,
+            documentFileURL: documentFileURL,
             editMode: .constant(editMode)
         )
     }
@@ -43,6 +45,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         scrollView.drawsBackground = true
         scrollView.backgroundColor = .textBackgroundColor
+        scrollView.setAccessibilityIdentifier("editor.sourceScrollView")
 
         let textView = MarklyTextView()
         textView.delegate = context.coordinator
@@ -75,6 +78,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         textView.textContainer?.widthTracksTextView = true
         textView.font = .monospacedSystemFont(ofSize: fontSize, weight: .regular)
         textView.string = text
+        textView.setAccessibilityIdentifier("editor.sourceTextView")
         textView.dropHandler = { [weak coordinator = context.coordinator] urls, point in
             coordinator?.handleDroppedFiles(urls, at: point)
         }
@@ -127,6 +131,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         @Binding private var requestedLine: Int?
         @Binding private var revealedLine: Int?
         @Binding var editMode: EditorEditMode
+        private let documentFileURL: URL?
         private let highlighter = MarkdownSyntaxHighlighter()
         private let highlightDebounceInterval: TimeInterval = 0.06
         private var lastHandledRequestedLine: Int?
@@ -139,12 +144,14 @@ struct NativeMarkdownEditor: NSViewRepresentable {
             selectionState: Binding<EditorSelectionState>,
             requestedLine: Binding<Int?>,
             revealedLine: Binding<Int?>,
+            documentFileURL: URL?,
             editMode: Binding<EditorEditMode>
         ) {
             _text = text
             _selectionState = selectionState
             _requestedLine = requestedLine
             _revealedLine = revealedLine
+            self.documentFileURL = documentFileURL
             _editMode = editMode
             super.init()
             registerForEditorCommands()
@@ -756,7 +763,7 @@ struct NativeMarkdownEditor: NSViewRepresentable {
         }
 
         private func markdownForDroppedFile(_ url: URL) -> String? {
-            let path = escapedMarkdownPath(for: url)
+            let path = MarkdownAssetPathing.markdownPath(for: url, relativeTo: documentFileURL)
             let name = url.deletingPathExtension().lastPathComponent
 
             if isImageURL(url) {
@@ -771,14 +778,6 @@ struct NativeMarkdownEditor: NSViewRepresentable {
                 "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tiff", "svg"
             ]
             return imageExtensions.contains(url.pathExtension.lowercased())
-        }
-
-        private func escapedMarkdownPath(for url: URL) -> String {
-            let filePath = url.path(percentEncoded: false)
-            return filePath
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "(", with: "\\(")
-                .replacingOccurrences(of: ")", with: "\\)")
         }
 
         private func wrappedDropInsertion(snippets: [String], in text: NSString, at location: Int) -> String {

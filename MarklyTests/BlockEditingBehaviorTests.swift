@@ -18,6 +18,44 @@ final class BlockEditingBehaviorTests: XCTestCase {
         XCTAssertEqual(continuation, "\n4. ")
     }
 
+    func testContinuationMarkdownMatchesStructureType() {
+        let unordered = MarkdownBlock(kind: .unorderedList, lineStart: 1, lineEnd: 1, text: "- item")
+        let task = MarkdownBlock(kind: .taskList, lineStart: 1, lineEnd: 1, text: "- [x] done")
+        let quote = MarkdownBlock(kind: .quote, lineStart: 1, lineEnd: 1, text: "> note")
+        let paragraph = MarkdownBlock(kind: .paragraph, lineStart: 1, lineEnd: 1, text: "Paragraph")
+
+        XCTAssertEqual(
+            BlockEditingBehavior.continuationMarkdown(after: unordered, editedText: unordered.text),
+            "\n- "
+        )
+        XCTAssertEqual(
+            BlockEditingBehavior.continuationMarkdown(after: task, editedText: task.text),
+            "\n- [ ] "
+        )
+        XCTAssertEqual(
+            BlockEditingBehavior.continuationMarkdown(after: quote, editedText: quote.text),
+            "\n> "
+        )
+        XCTAssertEqual(
+            BlockEditingBehavior.continuationMarkdown(after: paragraph, editedText: paragraph.text),
+            "\n新段落"
+        )
+    }
+
+    func testNonEmptyStructureLinesDoNotExitTheirBlocks() {
+        XCTAssertFalse(BlockEditingBehavior.shouldExitStructure(for: .quote, currentLineText: "> keep"))
+        XCTAssertFalse(BlockEditingBehavior.shouldExitStructure(for: .unorderedList, currentLineText: "- keep"))
+        XCTAssertFalse(BlockEditingBehavior.shouldExitStructure(for: .orderedList, currentLineText: "1. keep"))
+        XCTAssertFalse(BlockEditingBehavior.shouldExitStructure(for: .taskList, currentLineText: "- [x] keep"))
+    }
+
+    func testOrderedListContinuationFallsBackToOneWhenContentLacksMarker() {
+        let block = MarkdownBlock(kind: .orderedList, lineStart: 1, lineEnd: 1, text: "plain text")
+        let continuation = BlockEditingBehavior.continuationMarkdown(after: block, editedText: block.text)
+
+        XCTAssertEqual(continuation, "\n1. ")
+    }
+
     func testIndentationAddsLeadingSpacesAndUpdatesSelection() {
         let original = "- item\n- next"
         let result = BlockEditingBehavior.adjustingIndentation(

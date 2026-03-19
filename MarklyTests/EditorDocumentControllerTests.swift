@@ -64,6 +64,39 @@ final class EditorDocumentControllerTests: XCTestCase {
         XCTAssertEqual(mutation?.text, "- [x] todo")
     }
 
+    func testToggleTaskItemCanUncheckCompletedItem() {
+        let markdown = """
+        - [x] done
+        """
+
+        let mutation = EditorDocumentController.toggleTaskItem(in: markdown, lineNumber: 1)
+
+        XCTAssertEqual(mutation?.focusLine, 1)
+        XCTAssertEqual(mutation?.text, "- [ ] done")
+    }
+
+    func testToggleTaskItemOnlyChangesRequestedLine() {
+        let markdown = """
+        - [ ] first
+        - [x] second
+        """
+
+        let mutation = EditorDocumentController.toggleTaskItem(in: markdown, lineNumber: 2)
+
+        XCTAssertEqual(mutation?.text, "- [ ] first\n- [ ] second")
+        XCTAssertEqual(mutation?.focusLine, 2)
+    }
+
+    func testToggleTaskItemReturnsNilForNonTaskLine() {
+        let markdown = """
+        plain paragraph
+        """
+
+        let mutation = EditorDocumentController.toggleTaskItem(in: markdown, lineNumber: 1)
+
+        XCTAssertNil(mutation)
+    }
+
     func testMergeBlocksPreservesMergedContentAndFocusesPreviousBlock() {
         let markdown = """
         First
@@ -127,6 +160,76 @@ final class EditorDocumentControllerTests: XCTestCase {
             to: .paragraph
         )
 
-        XCTAssertEqual(mutation.text, "```swift\nprint(\"hello\")\n```")
+        XCTAssertEqual(mutation.text, "print(\"hello\")")
+    }
+
+    func testConvertCodeFenceToHeadingUsesInnerContent() {
+        let markdown = """
+        ```swift
+        print("hello")
+        ```
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.convertBlockToHeading(
+            in: markdown,
+            block: block,
+            level: 2
+        )
+
+        XCTAssertEqual(mutation.text, "## print(\"hello\")")
+    }
+
+    func testConvertCodeFenceToQuoteDropsFenceMarkers() {
+        let markdown = """
+        ```swift
+        let answer = 42
+        print(answer)
+        ```
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.convertBlock(
+            in: markdown,
+            block: block,
+            to: .quote
+        )
+
+        XCTAssertEqual(mutation.text, "> let answer = 42\n> print(answer)")
+    }
+
+    func testUpdateCodeFenceLanguagePreservesBodyAndFenceStyle() {
+        let markdown = """
+        ```swift
+        print("hello")
+        ```
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.updateCodeFenceLanguage(
+            in: markdown,
+            block: block,
+            language: "python"
+        )
+
+        XCTAssertEqual(mutation.text, "```python\nprint(\"hello\")\n```")
+        XCTAssertEqual(mutation.focusLine, 1)
+    }
+
+    func testUpdateCodeFenceLanguageCanClearLanguageMarker() {
+        let markdown = """
+        ~~~swift
+        print("hello")
+        ~~~
+        """
+        let block = MarkdownAnalysis.blocks(in: markdown)[0]
+
+        let mutation = EditorDocumentController.updateCodeFenceLanguage(
+            in: markdown,
+            block: block,
+            language: ""
+        )
+
+        XCTAssertEqual(mutation.text, "~~~\nprint(\"hello\")\n~~~")
     }
 }

@@ -74,6 +74,51 @@ final class MarkdownAnalysisTests: XCTestCase {
         XCTAssertEqual(sections[2].contentLineEnd, 6)
     }
 
+    func testHeadingSectionContainsNestedContentUntilNextParent() {
+        let markdown = """
+        # Parent
+        intro
+        ## Child
+        child text
+        ### Grandchild
+        deep text
+        # Next
+        tail
+        """
+
+        let sections = MarkdownAnalysis.headingSections(in: markdown)
+
+        XCTAssertEqual(sections.count, 4)
+        XCTAssertEqual(sections[0].heading.title, "Parent")
+        XCTAssertEqual(sections[0].contentLineStart, 2)
+        XCTAssertEqual(sections[0].contentLineEnd, 6)
+        XCTAssertTrue(sections[0].contains(lineNumber: 5))
+        XCTAssertFalse(sections[0].contains(lineNumber: 7))
+
+        XCTAssertEqual(sections[1].heading.title, "Child")
+        XCTAssertEqual(sections[1].contentLineEnd, 6)
+        XCTAssertTrue(sections[1].contains(lineNumber: 6))
+
+        XCTAssertEqual(sections[2].heading.title, "Grandchild")
+        XCTAssertEqual(sections[2].contentLineEnd, 6)
+        XCTAssertTrue(sections[2].hasContent)
+    }
+
+    func testHeadingSectionWithoutBodyReportsNoContent() {
+        let markdown = """
+        # Solo
+        # Next
+        body
+        """
+
+        let sections = MarkdownAnalysis.headingSections(in: markdown)
+
+        XCTAssertEqual(sections.count, 2)
+        XCTAssertFalse(sections[0].hasContent)
+        XCTAssertEqual(sections[0].contentLineEnd, 1)
+        XCTAssertTrue(sections[1].hasContent)
+    }
+
     func testBlocksRecognizeNestedListsAndQuotedLists() {
         let markdown = """
         - parent

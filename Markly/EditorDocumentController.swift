@@ -31,11 +31,12 @@ enum EditorDocumentController {
         to kind: MarkdownBlockKind
     ) -> EditorDocumentMutation {
         let normalized = normalizedLines(from: block)
+        let plainText = plainTextContent(from: block)
         let replacement: String
 
         switch kind {
         case .paragraph:
-            replacement = nonEmpty(normalized.joined(separator: "\n")) ?? "段落内容"
+            replacement = nonEmpty(plainText) ?? "段落内容"
         case .quote:
             replacement = normalized.map { $0.isEmpty ? "" : "> " + $0 }.joined(separator: "\n")
         case .unorderedList:
@@ -54,6 +55,35 @@ enum EditorDocumentController {
         }
 
         return replaceBlock(in: text, block: block, replacement: replacement)
+    }
+
+    static func updateCodeFenceLanguage(
+        in text: String,
+        block: MarkdownBlock,
+        language: String
+    ) -> EditorDocumentMutation {
+        guard block.kind == .codeFence else {
+            return replaceBlock(in: text, block: block, replacement: block.text)
+        }
+
+        var lines = block.text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let firstLine = lines.first else {
+            return replaceBlock(in: text, block: block, replacement: block.text)
+        }
+
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        let marker: String
+        if trimmed.hasPrefix("```") {
+            marker = "```"
+        } else if trimmed.hasPrefix("~~~") {
+            marker = "~~~"
+        } else {
+            return replaceBlock(in: text, block: block, replacement: block.text)
+        }
+
+        let normalizedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
+        lines[0] = normalizedLanguage.isEmpty ? marker : marker + normalizedLanguage
+        return replaceBlock(in: text, block: block, replacement: lines.joined(separator: "\n"))
     }
 
     static func mergeBlocks(
@@ -330,10 +360,15 @@ enum EditorDocumentController {
     }
 
     private static func normalizedLines(from block: MarkdownBlock) -> [String] {
-        block.text
+        plainTextContent(from: block)
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
             .map(normalizeLineContent)
+    }
+
+    private static func plainTextContent(from block: MarkdownBlock) -> String {
+        let content = block.kind == .codeFence ? unwrapCodeFence(from: block.text) : block.text
+        return content.trimmingCharacters(in: .newlines)
     }
 
     private static func normalizeLineContent(_ line: String) -> String {

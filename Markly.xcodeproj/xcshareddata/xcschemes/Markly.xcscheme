@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Markly.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0D300150000000000000001"
+               BuildableName = "MarklyUITests.xctest"
+               BlueprintName = "MarklyUITests"
+               ReferencedContainer = "container:Markly.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -51,6 +65,17 @@
                BlueprintIdentifier = "C0D300040000000000000001"
                BuildableName = "MarklyTests.xctest"
                BlueprintName = "MarklyTests"
+               ReferencedContainer = "container:Markly.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "C0D300150000000000000001"
+               BuildableName = "MarklyUITests.xctest"
+               BlueprintName = "MarklyUITests"
                ReferencedContainer = "container:Markly.xcodeproj">
             </BuildableReference>
          </TestableReference>
